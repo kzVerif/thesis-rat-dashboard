@@ -5,8 +5,8 @@ import { cookies } from "next/headers";
 export type AuthUser = {
   id: string;
   username: string;
-  email: string;
-  display_name: string;
+  email?: string | null;
+  display_name?: string | null;
   role: string;
 };
 
@@ -28,7 +28,8 @@ async function authFetch(path: string) {
   const apiUrl = getApiUrl();
   if (!apiUrl) return null;
 
-  const session = (await cookies()).get("__Host-session");
+  const cookieStore = await cookies();
+  const session = cookieStore.get("__Host-session") || cookieStore.get("session");
   if (!session) return null;
 
   try {
@@ -49,7 +50,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const data: unknown = await response.json().catch(() => null);
   if (!data || typeof data !== "object") return null;
   const user = data as Partial<AuthUser>;
-  if (!user.id || !user.username || !user.email || !user.role) return null;
+  if (!user.id || !user.username || !user.role) return null;
   return user as AuthUser;
 }
 
