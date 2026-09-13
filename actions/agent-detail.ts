@@ -9,6 +9,7 @@ import type {
   AgentCommandResult,
   AgentDetail,
 } from "@/app/(system)/agents/[id]/_lib/types";
+import { revalidateAgentPaths } from "@/lib/revalidation";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "ไม่สามารถติดต่อระบบหลังบ้านได้";
@@ -30,6 +31,7 @@ export async function stopAgentProcessAction(
 ): Promise<AgentCommandResult> {
   try {
     await stopAgentProcess(id, pid);
+    revalidateAgentPaths(id);
     return { ok: true, data: undefined };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
@@ -41,9 +43,9 @@ export async function shutdownAgentAction(
 ): Promise<AgentCommandResult> {
   try {
     await shutdownAgent(id);
+    revalidateAgentPaths(id);
     return { ok: true, data: undefined };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   }
 }
-

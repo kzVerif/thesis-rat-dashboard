@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { revalidateUserPaths } from "@/lib/revalidation";
 import { createUser, removeUser, updateUser } from "@/app/(system)/users/_lib/users-server";
 import type { User, UserActionResult } from "@/app/(system)/users/_lib/types";
 
@@ -23,7 +23,7 @@ export async function createUserAction(input: Record<string, string>): Promise<U
   try {
     const data = baseSchema.extend({ password: z.string().min(8, "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร") }).parse(input);
     const user = await createUser(data);
-    revalidatePath("/users");
+    revalidateUserPaths();
     return { ok: true, data: user };
   } catch (error) { return { ok: false, error: message(error) }; }
 }
@@ -33,7 +33,7 @@ export async function updateUserAction(input: Record<string, string>): Promise<U
     const id = idSchema.parse(input.id);
     const data = baseSchema.extend({ password: z.string().refine((value) => !value || value.length >= 8, "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร").optional() }).parse(input);
     const user = await updateUser(id, { ...data, password: data.password || undefined });
-    revalidatePath("/users");
+    revalidateUserPaths();
     return { ok: true, data: user };
   } catch (error) { return { ok: false, error: message(error) }; }
 }
@@ -41,7 +41,7 @@ export async function updateUserAction(input: Record<string, string>): Promise<U
 export async function deleteUserAction(idInput: string): Promise<UserActionResult> {
   try {
     await removeUser(idSchema.parse(idInput));
-    revalidatePath("/users");
+    revalidateUserPaths();
     return { ok: true, data: undefined };
   } catch (error) { return { ok: false, error: message(error) }; }
 }

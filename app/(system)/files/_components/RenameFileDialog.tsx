@@ -18,7 +18,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 type RenameFileDialogProps = {
   currentName: string;
-  onRename?: (newName: string) => void;
+  onRename: (newName: string) => Promise<boolean>;
 };
 
 export default function RenameFileDialog({
@@ -27,6 +27,7 @@ export default function RenameFileDialog({
 }: RenameFileDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(currentName);
+  const [isSaving, setIsSaving] = useState(false);
 
   const fileNameWithoutExt = useMemo(() => {
     const lastDot = currentName.lastIndexOf(".");
@@ -34,12 +35,14 @@ export default function RenameFileDialog({
     return currentName.slice(0, lastDot);
   }, [currentName]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    onRename?.(trimmedName);
-    setOpen(false);
+    setIsSaving(true);
+    const renamed = await onRename(trimmedName);
+    setIsSaving(false);
+    if (renamed) setOpen(false);
   };
 
   return (
@@ -76,8 +79,8 @@ export default function RenameFileDialog({
           <Button type="button" variant="outline" onClick={() => setOpen(false)}>
             ยกเลิก
           </Button>
-          <Button type="button" onClick={handleSave} disabled={!name.trim()}>
-            บันทึก
+          <Button type="button" onClick={handleSave} disabled={!name.trim() || isSaving}>
+            {isSaving ? "กำลังบันทึก..." : "บันทึก"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -18,7 +18,7 @@ import React, { useState, useRef } from "react";
 type UploadDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onUpload?: (files: File[]) => void;
+  onUpload: (files: File[]) => Promise<boolean>;
 };
 
 export default function UploadDialog({
@@ -27,11 +27,15 @@ export default function UploadDialog({
   onUpload,
 }: UploadDialogProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
-    onUpload?.(selectedFiles);
+    setIsUploading(true);
+    const uploaded = await onUpload(selectedFiles);
+    setIsUploading(false);
+    if (!uploaded) return;
     setOpen(false);
     setSelectedFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -81,6 +85,7 @@ export default function UploadDialog({
                 type="button"
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
               >
                 เลือกไฟล์
               </Button>
@@ -101,11 +106,11 @@ export default function UploadDialog({
           </Button>
           <Button
             onClick={handleUpload}
-            disabled={selectedFiles.length === 0}
+            disabled={selectedFiles.length === 0 || isUploading}
             className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
           >
             <HugeiconsIcon icon={FileUploadIcon} className="w-4 h-4 mr-2" />
-            อัปโหลด
+            {isUploading ? "กำลังอัปโหลด..." : "อัปโหลด"}
             {selectedFiles.length > 0 ? ` ${selectedFiles.length} ไฟล์` : ""}
           </Button>
         </DialogFooter>

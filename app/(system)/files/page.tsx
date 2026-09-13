@@ -1,8 +1,21 @@
 import AttachmentShow from "./_components/AttachmentShow";
-import { getFilesSnapshot } from "./_lib/files-server";
+import { getFiles } from "./_lib/files-server";
 
-export default async function FilesPage() {
-  await getFilesSnapshot();
+type FilesPageProps = {
+  searchParams: Promise<{ page?: string | string[]; limit?: string | string[] }>;
+};
+
+function positiveInteger(value: string | string[] | undefined, fallback: number) {
+  const parsed = Number(Array.isArray(value) ? value[0] : value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export default async function FilesPage({ searchParams }: FilesPageProps) {
+  const query = await searchParams;
+  const page = positiveInteger(query.page, 1);
+  const limit = Math.min(100, positiveInteger(query.limit, 20));
+  const response = await getFiles(page, limit);
+
   return (
     <div className="mx-auto w-full max-w-7xl">
       <header className="mb-6 sm:mb-8">
@@ -20,7 +33,11 @@ export default async function FilesPage() {
         </div>
       </header>
 
-      <AttachmentShow />
+      <AttachmentShow
+        key={`${response.pagination.page}-${response.pagination.limit}-${response.pagination.total}-${response.files.map((file) => file.filename).join(",")}`}
+        initialFiles={response.files}
+        pagination={response.pagination}
+      />
     </div>
   );
 }

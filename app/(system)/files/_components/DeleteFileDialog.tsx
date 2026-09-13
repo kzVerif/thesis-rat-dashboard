@@ -15,7 +15,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 type DeleteFileDialogProps = {
   fileName: string;
-  onDelete?: () => void;
+  onDelete: () => Promise<boolean>;
 };
 
 export default function DeleteFileDialog({
@@ -23,10 +23,13 @@ export default function DeleteFileDialog({
   onDelete,
 }: DeleteFileDialogProps) {
   const [open, setOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleDelete = () => {
-    onDelete?.();
-    setOpen(false);
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    const deleted = await onDelete();
+    setIsDeleting(false);
+    if (deleted) setOpen(false);
   };
 
   return (
@@ -56,8 +59,8 @@ export default function DeleteFileDialog({
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               ยกเลิก
             </Button>
-            <Button type="button" variant="destructive" onClick={handleDelete}>
-              ยืนยันลบ
+            <Button type="button" variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "กำลังลบ..." : "ยืนยันลบ"}
             </Button>
           </DialogFooter>
         </DialogContent>

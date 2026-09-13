@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { revalidateRoomPaths } from "@/lib/revalidation";
 import { createRoom, removeRoom, updateRoom } from "@/app/(system)/rooms/_lib/room-server";
 import type { Room, RoomActionResult } from "@/app/(system)/rooms/_lib/types";
 
@@ -19,7 +19,7 @@ function errorMessage(error: unknown) {
 export async function createRoomAction(input: { name: string; description: string }): Promise<RoomActionResult<Room>> {
   try {
     const room = await createRoom(roomSchema.parse(input));
-    revalidatePath("/rooms");
+    revalidateRoomPaths();
     return { ok: true, data: room };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
@@ -30,7 +30,7 @@ export async function updateRoomAction(input: { id: string; name: string; descri
   try {
     const id = idSchema.parse(input.id);
     const room = await updateRoom(id, roomSchema.parse(input));
-    revalidatePath("/rooms");
+    revalidateRoomPaths();
     return { ok: true, data: room };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
@@ -40,7 +40,7 @@ export async function updateRoomAction(input: { id: string; name: string; descri
 export async function deleteRoomAction(idInput: string): Promise<RoomActionResult> {
   try {
     await removeRoom(idSchema.parse(idInput));
-    revalidatePath("/rooms");
+    revalidateRoomPaths();
     return { ok: true, data: undefined };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };

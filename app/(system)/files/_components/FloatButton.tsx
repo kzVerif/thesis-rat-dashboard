@@ -15,7 +15,7 @@ import UploadDialog from "./UploadDialog";
 export default function FloatButton({
   onUpload,
 }: {
-  onUpload?: (files: File[]) => void;
+  onUpload: (files: File[]) => Promise<boolean>;
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);

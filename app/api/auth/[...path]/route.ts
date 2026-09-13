@@ -1,4 +1,5 @@
 import { getApiUrl } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 
 const allowedRoutes = new Set([
   "login",
@@ -50,6 +51,10 @@ async function proxyAuthRequest(
       body,
       cache: "no-store",
     });
+
+    if (upstream.ok && method !== "GET" && method !== "HEAD" && (route === "change-password" || route === "logout-all" || route.startsWith("sessions/"))) {
+      revalidatePath("/settings");
+    }
 
     const responseHeaders = new Headers();
     const upstreamType = upstream.headers.get("content-type");

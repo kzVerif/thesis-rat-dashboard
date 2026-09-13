@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,36 +21,22 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
+import type { DistributionSnapshot } from "../_lib/types";
+import { useFileDistribution } from "@/components/file-distribution/file-distribution-provider";
 
 type TargetType = "computer" | "room";
 
-const files = [
-  { id: "file-1", name: "workspace.png", type: "PNG", size: "820 KB" },
-  { id: "file-2", name: "คู่มือการใช้งาน.pdf", type: "PDF", size: "4.2 MB" },
-  { id: "file-3", name: "setup-client.exe", type: "EXE", size: "18.6 MB" },
-  { id: "file-4", name: "รายชื่อนักเรียน.xlsx", type: "XLSX", size: "236 KB" },
-  { id: "file-5", name: "lesson-assets.zip", type: "ZIP", size: "52.1 MB" },
-  { id: "file-6", name: "ประกาศห้องเรียน.docx", type: "DOCX", size: "96 KB" },
-];
-
-const targetOptions = {
-  computer: Array.from({ length: 120 }, (_, index) => {
-    const roomNumber = Math.floor(index / 30) + 1;
-    const computerNumber = String((index % 30) + 1).padStart(2, "0");
-    return {
-      id: `pc-lab-${roomNumber}-${computerNumber}`,
-      name: `PC-LAB-${roomNumber}-${computerNumber}`,
-      description: `ห้องปฏิบัติการ ${roomNumber}`,
-    };
-  }),
-  room: Array.from({ length: 24 }, (_, index) => ({
-    id: `room-${index + 1}`,
-    name: `ห้องปฏิบัติการ ${index + 1}`,
-    description: `${20 + ((index * 7) % 21)} เครื่อง`,
-  })),
-};
-
-export default function DistributeFilesClient() {
+export default function DistributeFilesClient({
+  snapshot,
+}: {
+  snapshot: DistributionSnapshot;
+}) {
+  const { files, computers, rooms } = snapshot;
+  const { connection, distribute } = useFileDistribution();
+  const targetOptions = useMemo(
+    () => ({ computer: computers, room: rooms }),
+    [computers, rooms],
+  );
   const [selectedFileId, setSelectedFileId] = useState("");
   const [targetType, setTargetType] = useState<TargetType>("computer");
   const [selectedTargetId, setSelectedTargetId] = useState("");
@@ -64,7 +51,7 @@ export default function DistributeFilesClient() {
     return files.filter((file) =>
       file.name.toLocaleLowerCase().includes(normalizedQuery)
     );
-  }, [query]);
+  }, [files, query]);
 
   const selectedFile = files.find((file) => file.id === selectedFileId);
   const selectedTarget = targetOptions[targetType].find(
@@ -78,7 +65,7 @@ export default function DistributeFilesClient() {
         target.name.toLocaleLowerCase().includes(normalizedQuery) ||
         target.description.toLocaleLowerCase().includes(normalizedQuery)
     );
-  }, [targetQuery, targetType]);
+  }, [targetOptions, targetQuery, targetType]);
 
   const handleTargetTypeChange = (type: TargetType) => {
     setTargetType(type);
@@ -94,16 +81,40 @@ export default function DistributeFilesClient() {
 
   const handleConfirmDistribute = () => {
     if (!selectedFile || !selectedTarget) return;
+    const targetedComputers = targetType === "computer"
+      ? computers.filter((computer) => computer.id === selectedTarget.id)
+      : computers.filter((computer) => computer.roomId === selectedTarget.id);
+    try {
+      distribute({
+        fileId: selectedFile.id,
+        filename: selectedFile.name,
+        fileSize: selectedFile.sizeBytes,
+        targetLabel: selectedTarget.name,
+        target: targetType === "computer"
+          ? { type: "AGENTS", agent_ids: [selectedTarget.id] }
+          : { type: "ROOM", room_id: selectedTarget.id },
+        computers: targetedComputers.map((computer) => ({
+          id: computer.id,
+          hostname: computer.name,
+          ipAddress: computer.ipAddress,
+          status: computer.status,
+        })),
+      });
+    } catch (error) {
+      toast.error("ยังไม่สามารถกระจายไฟล์ได้", {
+        description: error instanceof Error ? error.message : "WebSocket ยังไม่ได้เชื่อมต่อ",
+      });
+      return;
+    }
     setConfirmOpen(false);
     setSubmitted(true);
-    toast.success("เริ่มกระจายไฟล์แล้ว", {
-      description: `${selectedFile.name} → ${selectedTarget.name}`,
-    });
+    toast.info("ส่งคำขอกระจายไฟล์แล้ว", { description: "กำลังรอ Backend สร้าง Distribution Job" });
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl">
-      <header className="mb-6 sm:mb-8">
+    <div className="mx-auto w-full min-w-0 max-w-7xl">
+      <header className="mb-5 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
+        <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
           File Distribution
         </p>
@@ -113,12 +124,19 @@ export default function DistributeFilesClient() {
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-400 sm:text-base">
           เลือกไฟล์หนึ่งรายการ จากนั้นเลือกเครื่องหรือห้องปลายทางเพื่อเริ่มกระจายไฟล์
         </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ConnectionBadge state={connection} />
+          <Button asChild variant="outline" className="h-9">
+            <Link href="/file-distributions">ดูงานทั้งหมด</Link>
+          </Button>
+        </div>
       </header>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="border-b border-slate-200 p-4 dark:border-slate-800 sm:p-5">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-4 sm:space-y-5">
+          <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:rounded-2xl">
+            <div className="border-b border-slate-200 p-3 dark:border-slate-800 sm:p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <StepLabel number={1} />
@@ -139,13 +157,13 @@ export default function DistributeFilesClient() {
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="ค้นหาไฟล์..."
-                    className="pl-9"
+                    className="h-10 pl-9 sm:h-9"
                   />
                 </label>
               </div>
             </div>
 
-            <div className="max-h-[420px] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+            <div className="max-h-[min(420px,45dvh)] divide-y divide-slate-100 overflow-y-auto overscroll-contain dark:divide-slate-800">
               {visibleFiles.map((file) => {
                 const isSelected = selectedFileId === file.id;
                 return (
@@ -156,7 +174,7 @@ export default function DistributeFilesClient() {
                       setSelectedFileId(file.id);
                       setSubmitted(false);
                     }}
-                    className={`flex w-full items-center gap-3 p-4 text-left transition-colors sm:gap-4 sm:p-5 ${
+                    className={`flex min-h-16 w-full items-center gap-3 p-3 text-left transition-colors sm:min-h-20 sm:gap-4 sm:p-5 ${
                       isSelected
                         ? "bg-blue-50 dark:bg-blue-950/30"
                         : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
@@ -191,7 +209,7 @@ export default function DistributeFilesClient() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+          <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:rounded-2xl sm:p-5">
             <StepLabel number={2} />
             <h2 className="mt-2 text-lg font-semibold text-slate-950 dark:text-white">
               เลือกประเภทปลายทาง
@@ -200,7 +218,7 @@ export default function DistributeFilesClient() {
               ส่งไปยังเครื่องเดียว หรือส่งไปยังทุกเครื่องภายในห้อง
             </p>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 min-[480px]:grid-cols-2">
               <TargetTypeButton
                 active={targetType === "computer"}
                 icon={ComputerIcon}
@@ -218,7 +236,7 @@ export default function DistributeFilesClient() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+          <section className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:rounded-2xl sm:p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <StepLabel number={3} />
@@ -243,13 +261,13 @@ export default function DistributeFilesClient() {
                   value={targetQuery}
                   onChange={(event) => setTargetQuery(event.target.value)}
                   placeholder={`ค้นหา${targetType === "computer" ? "เครื่อง" : "ห้อง"}...`}
-                  className="pl-9"
+                  className="h-10 pl-9 sm:h-9"
                 />
               </label>
             </div>
 
-            <div className="mt-4 max-h-[460px] overflow-y-auto rounded-xl border border-slate-200 p-2 dark:border-slate-800 sm:p-3">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 max-h-[min(460px,50dvh)] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 p-2 dark:border-slate-800 sm:p-3">
+              <div className="grid gap-2 min-[520px]:grid-cols-2 xl:grid-cols-3">
               {visibleTargets.map((target) => {
                 const isSelected = selectedTargetId === target.id;
                 return (
@@ -260,7 +278,7 @@ export default function DistributeFilesClient() {
                       setSelectedTargetId(target.id);
                       setSubmitted(false);
                     }}
-                    className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
+                    className={`flex min-h-16 min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
                       isSelected
                         ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500 dark:bg-blue-950/30"
                         : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
@@ -297,8 +315,8 @@ export default function DistributeFilesClient() {
           </section>
         </div>
 
-        <aside className="xl:sticky xl:top-24 xl:self-start">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+        <aside className="min-w-0 lg:sticky lg:top-20 lg:self-start">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:rounded-2xl sm:p-5">
             <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
               สรุปการกระจายไฟล์
             </h2>
@@ -319,16 +337,16 @@ export default function DistributeFilesClient() {
 
             {submitted && (
               <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-                เริ่มกระจายไฟล์เรียบร้อยแล้ว
+                ส่งคำขอแล้ว ติดตามสถานะได้ที่หน้างานกระจายไฟล์
               </div>
             )}
 
             <Button
               type="button"
               size="lg"
-              disabled={!selectedFile || !selectedTarget}
+              disabled={!selectedFile || !selectedTarget || connection !== "live"}
               onClick={handleOpenConfirmation}
-              className="mt-5 w-full bg-blue-600 text-white hover:bg-blue-700"
+              className="mt-5 h-11 w-full bg-blue-600 text-sm text-white hover:bg-blue-700"
             >
               <HugeiconsIcon icon={FileExportIcon} className="mr-2 size-5" />
               กระจายไฟล์
@@ -341,8 +359,8 @@ export default function DistributeFilesClient() {
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="font-kanit sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 font-kanit sm:max-w-lg sm:p-6">
+          <DialogHeader className="pr-7">
             <div className="mb-2 flex size-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">
               <HugeiconsIcon icon={FileExportIcon} className="size-6" />
             </div>
@@ -354,7 +372,7 @@ export default function DistributeFilesClient() {
 
           {selectedFile && selectedTarget && (
             <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-              <div className="flex min-w-0 items-center gap-3 border-b border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+              <div className="flex min-w-0 items-center gap-3 border-b border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/40 sm:p-4">
                 <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-white dark:border-blue-900/60 dark:bg-slate-900">
                   <Image
                     src="/files/file_icons.webp"
@@ -374,7 +392,7 @@ export default function DistributeFilesClient() {
                 </span>
               </div>
 
-              <dl className="divide-y divide-slate-100 px-4 dark:divide-slate-800">
+              <dl className="divide-y divide-slate-100 px-3 dark:divide-slate-800 sm:px-4">
                 <ConfirmationRow
                   label="ไฟล์"
                   value={selectedFile.name}
@@ -399,18 +417,19 @@ export default function DistributeFilesClient() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setConfirmOpen(false)}
+              className="h-10 w-full sm:w-auto"
             >
               กลับไปแก้ไข
             </Button>
             <Button
               type="button"
               onClick={handleConfirmDistribute}
-              className="bg-blue-600 text-white hover:bg-blue-700"
+              className="h-10 w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
             >
               <HugeiconsIcon icon={FileExportIcon} className="mr-1.5 size-4" />
               ยืนยันกระจายไฟล์
@@ -463,13 +482,13 @@ function TargetTypeButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-colors ${
+      className={`flex min-h-20 min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors sm:p-4 ${
         active
           ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500 dark:bg-blue-950/30"
           : "border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
       }`}
     >
-      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400 sm:size-11">
         <HugeiconsIcon icon={icon} className="size-6" />
       </span>
       <span className="min-w-0">
@@ -503,5 +522,15 @@ function ConfirmationRow({ label, value }: { label: string; value: string }) {
         {value}
       </dd>
     </div>
+  );
+}
+
+function ConnectionBadge({ state }: { state: "connecting" | "live" | "reconnecting" | "disconnected" }) {
+  const labels = { connecting: "Connecting...", live: "Live", reconnecting: "Reconnecting...", disconnected: "Disconnected" };
+  return (
+    <span className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+      <span className={`size-2 rounded-full ${state === "live" ? "animate-pulse bg-emerald-500" : state === "disconnected" ? "bg-red-500" : "bg-amber-500"}`} />
+      {labels[state]}
+    </span>
   );
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { revalidateUserPaths } from "@/lib/revalidation";
 
 const registerSchema = z
   .object({
@@ -87,6 +88,8 @@ export async function registerUser(
         message: responseMessage ?? `ส่งคำขอไม่สำเร็จ (${response.status})`,
       };
     }
+
+    revalidateUserPaths();
 
     return {
       success: true,

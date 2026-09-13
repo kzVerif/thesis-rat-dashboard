@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { revalidateRolePaths } from "@/lib/revalidation";
 import { createRole, removeRole, updateRole } from "@/app/(system)/permissions/_lib/rbac-server";
 import type { ActionResult, RoleInput } from "@/app/(system)/permissions/_lib/types";
 
@@ -20,7 +20,7 @@ export async function createRoleAction(input: RoleInput): Promise<ActionResult> 
   try {
     const value = roleInput.parse(input);
     await createRole(value);
-    revalidatePath("/permissions");
+    revalidateRolePaths();
     return { ok: true, data: undefined };
   } catch (error) {
     return failure(error);
@@ -32,7 +32,7 @@ export async function updateRoleAction(id: string, input: RoleInput): Promise<Ac
     uuid.parse(id);
     const value = roleInput.parse(input);
     await updateRole(id, value);
-    revalidatePath("/permissions");
+    revalidateRolePaths();
     return { ok: true, data: undefined };
   } catch (error) {
     return failure(error);
@@ -43,7 +43,7 @@ export async function deleteRoleAction(id: string): Promise<ActionResult> {
   try {
     uuid.parse(id);
     await removeRole(id);
-    revalidatePath("/permissions");
+    revalidateRolePaths();
     return { ok: true, data: undefined };
   } catch (error) {
     return failure(error);
