@@ -120,7 +120,7 @@ export default function SettingsClient({
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Info label="ชื่อผู้ใช้" value={initialUser.username} />
           <Info label="ชื่อที่แสดง" value={initialUser.display_name || "-"} />
-          <Info label="อีเมล" value={initialUser.email} />
+          <Info label="อีเมล" value={initialUser.email || "-"} />
           <Info label="สิทธิ์" value={initialUser.role} />
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
+// components/TokenManagement.tsx  (replace your existing component)
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +23,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
+import * as tokensClient from "../_lib/tokensClient";
 
 type RegistrationToken = {
   id: string;
@@ -32,18 +34,39 @@ type RegistrationToken = {
   createdAt: string;
 };
 
-const initialTokens: RegistrationToken[] = [
-  { id: "token-1", code: "Ab3!xY7@kL9#", used: 12, maxUse: 30, expiresAt: "2026-12-31", createdAt: "29 ก.ค. 2569" },
-  { id: "token-2", code: "Rt8$Qa2%Vm4&", used: 5, maxUse: 5, expiresAt: "2026-10-15", createdAt: "28 ก.ค. 2569" },
-  { id: "token-3", code: "Zp6*Mn1!Bc5@", used: 2, maxUse: 20, expiresAt: "2025-12-31", createdAt: "20 ก.ค. 2569" },
-];
-
 export default function TokenManagement() {
-  const [tokens, setTokens] = useState(initialTokens);
+  const [tokens, setTokens] = useState<RegistrationToken[]>([]);
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<RegistrationToken | null>(null);
   const [deleting, setDeleting] = useState<RegistrationToken | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const json = await tokensClient.listTokens(); // expects { tokens: [...] }
+        if (!mounted) return;
+        const rows = json.tokens || [];
+        const mapped: RegistrationToken[] = rows.map((t: any) => ({
+          id: t.id,
+          code: t.token,
+          used: t.used_count ?? 0,
+          maxUse: t.max_use ?? 1,
+          expiresAt: t.expires_at ? t.expires_at.slice(0, 10) : "",
+          createdAt: new Date(t.created_at).toLocaleDateString("th-TH", { dateStyle: "medium" }),
+        }));
+        setTokens(mapped);
+      } catch (e: any) {
+        console.error(e);
+        toast.error("ไม่สามารถโหลดรายการ Token ได้");
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   const visibleTokens = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -55,38 +78,51 @@ export default function TokenManagement() {
     );
   }, [query, tokens]);
 
-  const handleCreate = (code: string, maxUse: number, expiresAt: string) => {
-    setTokens((current) => [
-      {
-        id: `token-${Date.now()}`,
-        code,
+  const handleCreate = async (_code: string, maxUse: number, expiresAt: string) => {
+    // NOTE: backend generates token value, client-provided code is ignored.
+    try {
+      const body = { token_type: "registration", max_use: maxUse, expires_at: expiresAt };
+      const res = await tokensClient.createToken(body); // { id, token }
+      const newToken: RegistrationToken = {
+        id: res.id,
+        code: res.token,
         used: 0,
         maxUse,
         expiresAt,
         createdAt: new Date().toLocaleDateString("th-TH", { dateStyle: "medium" }),
-      },
-      ...current,
-    ]);
-    setCreating(false);
-    toast.success("สร้าง Token เรียบร้อยแล้ว", { description: code });
+      };
+      setTokens((current) => [newToken, ...current]);
+      setCreating(false);
+      toast.success("สร้าง Token เรียบร้อยแล้ว", { description: res.token });
+    } catch (e: any) {
+      toast.error(e.message || "สร้าง Token ไม่สำเร็จ");
+    }
   };
 
-  const handleEdit = (maxUse: number, expiresAt: string) => {
+  const handleEdit = async (maxUse: number, expiresAt: string) => {
     if (!editing) return;
-    setTokens((current) =>
-      current.map((token) =>
-        token.id === editing.id ? { ...token, maxUse, expiresAt } : token
-      )
-    );
-    setEditing(null);
-    toast.success("อัปเดตเงื่อนไข Token แล้ว");
+    try {
+      await tokensClient.updateToken(editing.id, { max_use: maxUse, expires_at: expiresAt });
+      setTokens((current) =>
+        current.map((token) => (token.id === editing.id ? { ...token, maxUse, expiresAt } : token))
+      );
+      setEditing(null);
+      toast.success("อัปเดตเงื่อนไข Token แล้ว");
+    } catch (e: any) {
+      toast.error(e.message || "อัปเดตไม่สำเร็จ");
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleting) return;
-    setTokens((current) => current.filter((token) => token.id !== deleting.id));
-    toast.success("ลบ Token เรียบร้อยแล้ว");
-    setDeleting(null);
+    try {
+      await tokensClient.revokeToken(deleting.id);
+      setTokens((current) => current.filter((token) => token.id !== deleting.id));
+      toast.success("ลบ Token เรียบร้อยแล้ว");
+      setDeleting(null);
+    } catch (e: any) {
+      toast.error(e.message || "ลบไม่สำเร็จ");
+    }
   };
 
   const copyToken = async (code: string) => {
@@ -123,7 +159,9 @@ export default function TokenManagement() {
           </div>
         </div>
 
-        {visibleTokens.length === 0 ? (
+        {loading ? (
+          <div className="p-6 text-center">Loading...</div>
+        ) : visibleTokens.length === 0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
             <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800"><HugeiconsIcon icon={Key01Icon} className="size-7 text-slate-400" /></span>
             <h3 className="font-semibold text-slate-900 dark:text-white">ไม่พบ Token</h3>
@@ -170,103 +208,282 @@ export default function TokenManagement() {
   );
 }
 
-function CreateTokenDialog({ open, onOpenChange, onCreate, existingCodes }: { open: boolean; onOpenChange: (open: boolean) => void; onCreate: (code: string, maxUse: number, expiresAt: string) => void; existingCodes: string[] }) {
-  const [mode, setMode] = useState<"auto" | "custom">("auto");
-  const [code, setCode] = useState("");
-  const [maxUse, setMaxUse] = useState(1);
-  const [expiresAt, setExpiresAt] = useState("");
-  const error = mode === "custom" && code ? validateToken(code, existingCodes) : "";
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const finalCode = mode === "auto" ? generateToken(existingCodes) : code;
-    const validationError = validateToken(finalCode, existingCodes);
-    if (validationError) { toast.error(validationError); return; }
-    onCreate(finalCode, maxUse, expiresAt);
-    setCode(""); setMaxUse(1); setExpiresAt(""); setMode("auto");
-  };
+function validateToken(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length >= 6 && trimmed.length <= 64;
+}
+
+function generateToken(prefix = "RAT") {
+  const random = Math.random().toString(36).slice(2, 10).toUpperCase();
+  return `${prefix}-${random}`;
+}
+
+function formatDate(value: string) {
+  if (!value) return "ไม่ระบุ";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("th-TH", { dateStyle: "medium" }).format(date);
+}
+
+function getTokenStatus(token: RegistrationToken) {
+  const expiresAt = token.expiresAt ? new Date(token.expiresAt) : null;
+  const now = new Date();
+
+  if (expiresAt && expiresAt < now) {
+    return { type: "expired", label: "หมดอายุ" } as const;
+  }
+
+  if (token.used >= token.maxUse) {
+    return { type: "used", label: "เต็มแล้ว" } as const;
+  }
+
+  if (token.maxUse - token.used <= 1) {
+    return { type: "warning", label: "ใกล้เต็ม" } as const;
+  }
+
+  return { type: "active", label: "พร้อมใช้งาน" } as const;
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="font-kanit sm:max-w-lg">
-        <DialogHeader><DialogTitle>สร้าง Registration Token</DialogTitle><DialogDescription>เลือกให้ระบบสร้าง Token หรือกำหนดรหัส 12 ตัวอักษรด้วยตนเอง</DialogDescription></DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="text-right font-medium text-slate-700 dark:text-slate-200">{value}</dd>
+    </div>
+  );
+}
+
+function StatusBadge({ status, label }: { status: "active" | "warning" | "expired" | "used"; label: string }) {
+  const styles: Record<typeof status, string> = {
+    active: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+    warning: "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+    expired: "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
+    used: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  };
+
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${styles[status]}`}>
+      {label}
+    </span>
+  );
+}
+
+function ModeButton({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+        active
+          ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-300"
+          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CreateTokenDialog({
+  open,
+  onOpenChange,
+  onCreate,
+  existingCodes,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate: (_code: string, maxUse: number, expiresAt: string) => Promise<void>;
+  existingCodes: string[];
+}) {
+  const [mode, setMode] = useState<"auto" | "custom">("auto");
+  const [customCode, setCustomCode] = useState("");
+  const [maxUse, setMaxUse] = useState(5);
+  const [expiresAt, setExpiresAt] = useState("");
+
+  const reset = () => {
+    setMode("auto");
+    setCustomCode("");
+    setMaxUse(5);
+    setExpiresAt("");
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+
+    const code = mode === "custom" ? customCode : generateToken("RAT");
+    if (mode === "custom" && !validateToken(code)) {
+      toast.error("โค้ด Token ต้องมีความยาว 6-64 ตัวอักษร");
+      return;
+    }
+    if (existingCodes.includes(code)) {
+      toast.error("Token นี้มีอยู่แล้ว กรุณาเลือกโค้ดอื่น");
+      return;
+    }
+
+    await onCreate(code, maxUse, expiresAt);
+    reset();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => {
+      if (!next) reset();
+      onOpenChange(next);
+    }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>สร้าง Token ใหม่</DialogTitle>
+          <DialogDescription>
+            ระบบจะสร้าง Token จริงให้คุณทันที โดยค่าโค้ดที่เลือกในโหมด custom จะถูกตรวจสอบก่อนบันทึก
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>โหมดการสร้าง</Label>
             <div className="grid grid-cols-2 gap-2">
-              <ModeButton active={mode === "auto"} onClick={() => setMode("auto")} label="ระบบกำหนด" />
-              <ModeButton active={mode === "custom"} onClick={() => setMode("custom")} label="กำหนดเอง" />
-            </div>
-            {mode === "custom" && <div className="space-y-2"><Label>รหัส Token</Label><Input value={code} onChange={(e) => setCode(e.target.value)} maxLength={12} placeholder="Ab3!xY7@kL9#" className="h-10 font-mono" required /><p className={`text-xs ${error ? "text-red-500" : "text-slate-500"}`}>{error || "ต้องมีพิมพ์เล็ก พิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ"}</p></div>}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2"><Label>จำนวนเครื่องสูงสุด (Max Use)</Label><Input type="number" min={1} value={maxUse} onChange={(e) => setMaxUse(Number(e.target.value))} className="h-10" required /></div>
-              <div className="space-y-2"><Label>วันหมดอายุ</Label><Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="h-10" required /></div>
+              <ModeButton active={mode === "auto"} onClick={() => setMode("auto")}>สร้างอัตโนมัติ</ModeButton>
+              <ModeButton active={mode === "custom"} onClick={() => setMode("custom")}>กำหนดเอง</ModeButton>
             </div>
           </div>
-          <DialogFooter className="mt-5"><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>ยกเลิก</Button><Button type="submit" disabled={Boolean(error) || !expiresAt} className="bg-blue-600 text-white hover:bg-blue-700">สร้าง Token</Button></DialogFooter>
+
+          {mode === "custom" && (
+            <div className="space-y-2">
+              <Label htmlFor="token-code">Token</Label>
+              <Input
+                id="token-code"
+                value={customCode}
+                onChange={(event) => setCustomCode(event.target.value)}
+                placeholder="เช่น RAT-ABC123"
+              />
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="max-use">จำนวนการใช้งาน</Label>
+              <Input
+                id="max-use"
+                type="number"
+                min={1}
+                value={maxUse}
+                onChange={(event) => setMaxUse(Number(event.target.value) || 1)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expires-at">วันหมดอายุ</Label>
+              <Input
+                id="expires-at"
+                type="date"
+                value={expiresAt}
+                onChange={(event) => setExpiresAt(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
+            <Button type="submit">สร้าง Token</Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-function EditTokenDialog({ token, onOpenChange, onSave }: { token: RegistrationToken; onOpenChange: (open: boolean) => void; onSave: (maxUse: number, expiresAt: string) => void }) {
+function EditTokenDialog({
+  token,
+  onOpenChange,
+  onSave,
+}: {
+  token: RegistrationToken;
+  onOpenChange: (open: boolean) => void;
+  onSave: (maxUse: number, expiresAt: string) => Promise<void>;
+}) {
   const [maxUse, setMaxUse] = useState(token.maxUse);
   const [expiresAt, setExpiresAt] = useState(token.expiresAt);
-  return <Dialog open onOpenChange={onOpenChange}><DialogContent className="font-kanit sm:max-w-md"><DialogHeader><DialogTitle>แก้ไขเงื่อนไข Token</DialogTitle><DialogDescription>รหัส Token ไม่สามารถแก้ไขได้หลังจากสร้าง</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-2"><Label>รหัส Token</Label><Input value={token.code} readOnly className="h-10 bg-slate-100 font-mono dark:bg-slate-800" /></div><div className="space-y-2"><Label>Max Use</Label><Input type="number" min={Math.max(1, token.used)} value={maxUse} onChange={(e) => setMaxUse(Number(e.target.value))} className="h-10" /></div><div className="space-y-2"><Label>วันหมดอายุ</Label><Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="h-10" /></div></div><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>ยกเลิก</Button><Button onClick={() => onSave(maxUse, expiresAt)} className="bg-blue-600 text-white hover:bg-blue-700">บันทึกเงื่อนไข</Button></DialogFooter></DialogContent></Dialog>;
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    await onSave(maxUse, expiresAt);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>แก้ไขเงื่อนไข Token</DialogTitle>
+          <DialogDescription>ปรับจำนวนการใช้งานและวันหมดอายุสำหรับ token นี้</DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-max-use">จำนวนการใช้งาน</Label>
+              <Input
+                id="edit-max-use"
+                type="number"
+                min={1}
+                value={maxUse}
+                onChange={(event) => setMaxUse(Number(event.target.value) || 1)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-expires-at">วันหมดอายุ</Label>
+              <Input
+                id="edit-expires-at"
+                type="date"
+                value={expiresAt}
+                onChange={(event) => setExpiresAt(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
+            <Button type="submit">บันทึก</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-function DeleteTokenDialog({ token, onOpenChange, onConfirm }: { token: RegistrationToken | null; onOpenChange: (open: boolean) => void; onConfirm: () => void }) {
-  return <Dialog open={token !== null} onOpenChange={onOpenChange}><DialogContent className="font-kanit sm:max-w-md"><DialogHeader><DialogTitle>ยืนยันการลบ Token</DialogTitle><DialogDescription>Token {token?.code} จะไม่สามารถใช้ลงทะเบียน Agent ได้อีก</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>ยกเลิก</Button><Button variant="destructive" onClick={onConfirm}>ยืนยันลบ Token</Button></DialogFooter></DialogContent></Dialog>;
-}
+function DeleteTokenDialog({
+  token,
+  onOpenChange,
+  onConfirm,
+}: {
+  token: RegistrationToken | null;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => Promise<void>;
+}) {
+  if (!token) return null;
 
-function ModeButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return <button type="button" onClick={onClick} className={`rounded-xl border p-3 text-sm font-medium ${active ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300" : "border-slate-200 dark:border-slate-800"}`}>{label}</button>;
-}
+  return (
+    <Dialog open={!!token} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>ลบ Token</DialogTitle>
+          <DialogDescription>
+            คุณต้องการลบ Token <span className="font-mono text-slate-900 dark:text-slate-100">{token.code}</span> หรือไม่?
+          </DialogDescription>
+        </DialogHeader>
 
-function StatusBadge({ status, label }: { status: "active" | "expired" | "exhausted"; label: string }) {
-  const classes = status === "active" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : status === "expired" ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300";
-  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${classes}`}>{label}</span>;
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-center justify-between gap-3"><dt className="text-slate-500">{label}</dt><dd className="text-right font-medium text-slate-700 dark:text-slate-300">{value}</dd></div>;
-}
-
-function getTokenStatus(token: RegistrationToken) {
-  if (new Date(`${token.expiresAt}T23:59:59`) < new Date()) return { type: "expired" as const, label: "หมดอายุ" };
-  if (token.used >= token.maxUse) return { type: "exhausted" as const, label: "ใช้ครบแล้ว" };
-  return { type: "active" as const, label: "ใช้งานได้" };
-}
-
-function validateToken(code: string, existingCodes: string[]) {
-  if (code.length !== 12) return "Token ต้องมีความยาว 12 ตัวอักษร";
-  if (!/[a-z]/.test(code)) return "Token ต้องมีตัวพิมพ์เล็ก";
-  if (!/[A-Z]/.test(code)) return "Token ต้องมีตัวพิมพ์ใหญ่";
-  if (!/[0-9]/.test(code)) return "Token ต้องมีตัวเลข";
-  if (!/[^a-zA-Z0-9]/.test(code)) return "Token ต้องมีอักขระพิเศษ";
-  if (existingCodes.includes(code)) return "Token นี้มีอยู่ในระบบแล้ว";
-  return "";
-}
-
-function generateToken(existingCodes: string[]): string {
-  const lower = "abcdefghijklmnopqrstuvwxyz";
-  const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const numbers = "0123456789";
-  const special = "!@#$%^&*";
-  const all = lower + upper + numbers + special;
-  let token = [
-    lower[randomIndex(lower.length)],
-    upper[randomIndex(upper.length)],
-    numbers[randomIndex(numbers.length)],
-    special[randomIndex(special.length)],
-    ...Array.from({ length: 8 }, () => all[randomIndex(all.length)]),
-  ].sort(() => Math.random() - 0.5).join("");
-  if (existingCodes.includes(token)) token = generateToken(existingCodes);
-  return token;
-}
-
-function randomIndex(length: number) {
-  return crypto.getRandomValues(new Uint32Array(1))[0] % length;
-}
-
-function formatDate(value: string) {
-  return new Date(`${value}T00:00:00`).toLocaleDateString("th-TH", { dateStyle: "medium" });
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>ยกเลิก</Button>
+          <Button type="button" variant="destructive" onClick={() => void onConfirm()}>ลบ</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

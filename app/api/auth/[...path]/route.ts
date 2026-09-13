@@ -58,9 +58,17 @@ async function proxyAuthRequest(
 
     const responseHeaders = new Headers();
     const upstreamType = upstream.headers.get("content-type");
-    const setCookie = upstream.headers.get("set-cookie");
     if (upstreamType) responseHeaders.set("content-type", upstreamType);
-    if (setCookie) responseHeaders.set("set-cookie", setCookie);
+
+    const setCookies = upstream.headers.getSetCookie?.() || [];
+    if (setCookies.length > 0) {
+      for (const cookieStr of setCookies) {
+        responseHeaders.append("set-cookie", cookieStr);
+      }
+    } else {
+      const setCookie = upstream.headers.get("set-cookie");
+      if (setCookie) responseHeaders.set("set-cookie", setCookie);
+    }
     responseHeaders.set("cache-control", "no-store");
 
     return new Response(upstream.body, {

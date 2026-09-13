@@ -17,7 +17,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const apiUrl = getApiUrl();
   if (!apiUrl) throw new Error("ยังไม่ได้กำหนดค่า API_URL");
 
-  const session = (await cookies()).get("__Host-session");
+  const cookieStore = await cookies();
+  const session = cookieStore.get("__Host-session") || cookieStore.get("session");
   if (!session) throw new Error(errorByStatus[401]);
 
   let response: Response;
