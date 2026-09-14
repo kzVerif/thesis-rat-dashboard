@@ -1,122 +1,18 @@
-import {
-  ComputerIcon,
-  File02Icon,
-  ShutDownIcon,
-  SignalFull02Icon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { RecentlyUsedTable } from "./_components/RecentlyUsedTable";
 import { getDashboardSnapshot } from "./_lib/dashboard-server";
+import type { DashboardData } from "./_lib/types";
 
-export default async function DashboardPage() {
-  await getDashboardSnapshot();
-  return (
-    <div className="mx-auto w-full max-w-7xl">
+const card = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900";
+const when = (value: string) => new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Bangkok" }).format(new Date(value));
+const number = (value: number) => value.toLocaleString("th-TH");
+const bytes = (value: number) => { if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`; if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`; return `${(value / 1024 ** 3).toFixed(1)} GB`; };
+function Metric({ label, value, hint, tone = "blue" }: { label: string; value: number | string; hint: string; tone?: "blue" | "green" | "amber" | "red" }) { const tones = { blue: "bg-blue-50 text-blue-600", green: "bg-emerald-50 text-emerald-600", amber: "bg-amber-50 text-amber-600", red: "bg-red-50 text-red-600" }; return <div className="flex items-center gap-3"><div className={`grid size-10 shrink-0 place-items-center rounded-xl text-xs font-bold ${tones[tone]}`}>{typeof value === "number" ? value > 999 ? "999+" : value : "—"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{label}</p><p className="text-xs text-slate-500">{hint}</p></div></div>; }
+function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) { return <section className={card}><h2 className="text-lg font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-500">{subtitle}</p><div className="mt-5">{children}</div></section>; }
+function Bar({ label, value, total, color = "bg-blue-500" }: { label: string; value: number; total: number; color?: string }) { const width = total ? Math.min(100, value / total * 100) : 0; return <div className="space-y-2"><div className="flex justify-between text-sm"><span>{label}</span><span className="font-semibold">{number(value)}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} /></div></div>; }
 
-      {/* Headers */}
-      <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
-          แดชบอร์ด
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          ยินดีต้อนรับกลับมา
-        </p>
-      </div>
-
-      {/* Card Stats System */}
-      <div className="mb-6 sm:mb-8">
-
-      <div className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4 xl:gap-6">
-        <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-md shadow-blue-500/20 sm:size-20 xl:size-16 2xl:size-20">
-              <HugeiconsIcon
-                icon={ComputerIcon}
-                className="size-8 text-white sm:size-10 xl:size-8 2xl:size-10"
-              />
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="mb-1 text-sm text-gray-500 sm:text-base">ครื่องทั้งหมด</p>
-              <div className="flex items-baseline gap-1">
-                <h3 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                  100
-                </h3>
-                <h4>เครื่อง</h4>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4 bg-white  rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-blue-500/20 sm:size-20 xl:size-16 2xl:size-20">
-              <HugeiconsIcon
-                icon={SignalFull02Icon}
-                className="size-8 text-white sm:size-10 xl:size-8 2xl:size-10"
-              />
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="mb-1 text-sm text-gray-500 sm:text-base">เครื่องออนไลน์</p>
-              <div className="flex items-baseline gap-1">
-                <h3 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                  46
-                </h3>
-                <h4>เครื่อง</h4>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4 bg-white  rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 shadow-md shadow-blue-500/20 sm:size-20 xl:size-16 2xl:size-20">
-              <HugeiconsIcon
-                icon={ShutDownIcon}
-                className="size-8 text-white sm:size-10 xl:size-8 2xl:size-10"
-              />
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="mb-1 text-sm text-gray-500 sm:text-base">เครื่องออฟไลน์</p>
-              <div className="flex items-baseline gap-1">
-                <h3 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                  54
-                </h3>
-                <h4>เครื่อง</h4>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4 bg-white  rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-md shadow-blue-500/20 sm:size-20 xl:size-16 2xl:size-20">
-              <HugeiconsIcon
-                icon={File02Icon}
-                className="size-8 text-white sm:size-10 xl:size-8 2xl:size-10"
-              />
-            </div>
-            <div className="min-w-0 text-right">
-              <p className="mb-1 text-sm text-gray-500 sm:text-base">ไฟล์ในระบบ</p>
-              <div className="flex items-baseline gap-1">
-                <h3 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl">
-                  12
-                </h3>
-                <h4>ไฟล์</h4>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <p className="text-end text-sm text-gray-500">
-        ข้อมูล ณ {new Date().toLocaleString()}
-      </p>
-      </div>
-
-      {/* Commands Recently Used */}
-      <div>
-        <RecentlyUsedTable />
-      </div>
-      
-    </div>
-  );
+function DashboardContent({ data }: { data: DashboardData }) {
+  return <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><div className={`${card} border-l-4 border-l-blue-500`}><p className="text-sm text-slate-500">Agents</p><p className="mt-2 text-3xl font-bold">{number(data.agents.total)}</p><p className="mt-1 text-sm text-emerald-600">{number(data.agents.online)} ออนไลน์</p></div><div className={`${card} border-l-4 border-l-violet-500`}><p className="text-sm text-slate-500">Rooms</p><p className="mt-2 text-3xl font-bold">{number(data.rooms.total)}</p><p className="mt-1 text-sm text-slate-500">พื้นที่จัดการทั้งหมด</p></div><div className={`${card} border-l-4 border-l-amber-500`}><p className="text-sm text-slate-500">Tokens</p><p className="mt-2 text-3xl font-bold">{number(data.tokens.active)}</p><p className="mt-1 text-sm text-slate-500">จาก {number(data.tokens.total)} รายการ</p></div><div className={`${card} border-l-4 border-l-emerald-500`}><p className="text-sm text-slate-500">กิจกรรม 24 ชั่วโมง</p><p className="mt-2 text-3xl font-bold">{number(data.activity.last_24_hours)}</p><p className="mt-1 text-sm text-slate-500">รายการ audit logs</p></div></div>
+    <div className="grid gap-6 lg:grid-cols-2"><Panel title="สถานะ Agents" subtitle="ภาพรวมเครื่องที่ลงทะเบียนในระบบ"><div className="space-y-4"><Bar label="ออนไลน์" value={data.agents.online} total={data.agents.total} color="bg-emerald-500" /><Bar label="ออฟไลน์" value={data.agents.offline} total={data.agents.total} color="bg-slate-400" /><Bar label="Warning" value={data.agents.warning} total={data.agents.total} color="bg-amber-500" /><Bar label="Disabled" value={data.agents.disabled} total={data.agents.total} color="bg-red-500" /></div></Panel><Panel title="ผู้ใช้งานและพื้นที่" subtitle="จำนวนบัญชีและห้องในระบบ"><div className="grid gap-5 sm:grid-cols-2"><Metric label="ผู้ใช้งานทั้งหมด" value={data.users.total} hint={`${number(data.users.active)} ACTIVE`} tone="blue" /><Metric label="บัญชีถูกปิด" value={data.users.disabled} hint="DISABLED" tone="red" /><Metric label="บัญชีถูกล็อก" value={data.users.locked} hint="LOCKED" tone="amber" /><Metric label="Rooms" value={data.rooms.total} hint="ห้องทั้งหมด" tone="green" /></div></Panel></div>
+    <div className="grid gap-6 lg:grid-cols-3"><Panel title="ความปลอดภัย" subtitle="ผลการสแกน Antivirus"><div className="space-y-4"><Metric label="สแกนทั้งหมด" value={data.antivirus.total_scans} hint={`${number(data.antivirus.completed)} เสร็จสมบูรณ์`} /><Metric label="พบภัยคุกคาม" value={data.antivirus.threats_found} hint="ตรวจสอบโดยผู้ดูแลระบบ" tone="red" /><Metric label="สแกนล้มเหลว" value={data.antivirus.failed} hint="ควรตรวจสอบซ้ำ" tone="amber" /></div></Panel><Panel title="การกระจายไฟล์" subtitle="งานตามสถานะ"><div className="space-y-4"><Bar label="กำลังดำเนินการ" value={data.file_distributions.in_progress} total={data.file_distributions.total} color="bg-blue-500" /><Bar label="เสร็จสมบูรณ์" value={data.file_distributions.completed} total={data.file_distributions.total} color="bg-emerald-500" /><Bar label="รอดำเนินการ" value={data.file_distributions.pending} total={data.file_distributions.total} color="bg-amber-500" /><Bar label="ล้มเหลว" value={data.file_distributions.failed} total={data.file_distributions.total} color="bg-red-500" /></div></Panel><Panel title="พื้นที่จัดเก็บ" subtitle="ข้อมูลจาก Files API"><p className="text-4xl font-bold text-blue-600">{bytes(data.files.total_bytes)}</p><p className="mt-2 text-sm text-slate-500">{number(data.files.total)} ไฟล์ในระบบ</p><div className="mt-5 rounded-xl bg-slate-50 p-4 text-xs text-slate-500 dark:bg-slate-800/60">ขนาดรวมไฟล์ทั้งหมดจาก snapshot ล่าสุด</div></Panel></div></>;
 }
+
+export default async function DashboardPage() { const snapshot = await getDashboardSnapshot(); return <div className="mx-auto w-full max-w-7xl space-y-6"><header><p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">System overview</p><h1 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-3xl">แดชบอร์ด</h1>{snapshot.data ? <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">ภาพรวมระบบจาก Dashboard API · สร้างเมื่อ {when(snapshot.data.generated_at)}</p> : <p className="mt-2 text-sm text-red-600">ไม่สามารถโหลดข้อมูล Dashboard ได้</p>}</header>{snapshot.error ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{snapshot.error}</div> : snapshot.data ? <DashboardContent data={snapshot.data} /> : null}</div>; }

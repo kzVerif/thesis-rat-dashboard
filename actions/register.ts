@@ -72,7 +72,7 @@ export async function registerUser(
   }
 
   try {
-    const response = await fetch(`${apiUrl}/auth/register`, {
+    const response = await fetch(`${apiUrl}/api/auth/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(validation.data),

@@ -2,6 +2,7 @@ import { getApiUrl } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
 const allowedRoutes = new Set([
+  "register",
   "login",
   "logout",
   "logout-all",
@@ -9,6 +10,16 @@ const allowedRoutes = new Set([
   "sessions",
   "change-password",
 ]);
+
+const allowedMethods: Record<string, string[]> = {
+  register: ["POST"],
+  login: ["POST"],
+  me: ["GET"],
+  sessions: ["GET"],
+  logout: ["POST"],
+  "logout-all": ["POST"],
+  "change-password": ["POST"],
+};
 
 async function proxyAuthRequest(
   request: Request,
@@ -18,9 +29,10 @@ async function proxyAuthRequest(
   if (method !== "GET" && method !== "HEAD") {
     const origin = request.headers.get("origin");
     const fetchSite = request.headers.get("sec-fetch-site");
-    if ((origin && origin !== new URL(request.url).origin) || fetchSite === "cross-site") {
+    if (origin && !isAllowedAuthOrigin(origin, request)) {
       return Response.json({ error: "forbidden" }, { status: 403 });
     }
+    if (!origin && fetchSite === "cross-site") return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
   const apiUrl = getApiUrl();
@@ -32,6 +44,9 @@ async function proxyAuthRequest(
   const route = path.join("/");
   const validRoute = allowedRoutes.has(route) || /^sessions\/[^/]+$/.test(route);
   if (!validRoute) return Response.json({ error: "not_found" }, { status: 404 });
+  const routeName = route.startsWith("sessions/") ? "sessions/:id" : route;
+  const methods = routeName === "sessions/:id" ? ["DELETE"] : allowedMethods[routeName] ?? [];
+  if (!methods.includes(method)) return Response.json({ error: "method_not_allowed" }, { status: 405, headers: { Allow: methods.join(", ") } });
 
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
@@ -82,6 +97,17 @@ async function proxyAuthRequest(
       { status: 502 },
     );
   }
+}
+
+function isAllowedAuthOrigin(origin: string, request: Request) {
+  try {
+    const originUrl = new URL(origin);
+    const requestUrl = new URL(request.url);
+    const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0].trim();
+    const requestHosts = new Set([requestUrl.host, forwardedHost].filter(Boolean));
+    if (requestHosts.has(originUrl.host)) return true;
+    return originUrl.host === "localhost:3000" || originUrl.host === "192.168.1.194:3000" || /\.devtunnels\.ms$/i.test(originUrl.hostname);
+  } catch { return false; }
 }
 
 export const GET = proxyAuthRequest;
