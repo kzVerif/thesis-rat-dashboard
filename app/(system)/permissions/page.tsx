@@ -1,6 +1,7 @@
 import PermissionsManagement from "./_components/PermissionsManagement";
 import { getPermissions, getRoles } from "./_lib/rbac-server";
 import type { Permission, Role } from "./_lib/types";
+import { isAccessInterrupt } from "@/lib/access-control";
 
 export default async function PermissionsPage() {
   let loadError: string | null = null;
@@ -9,6 +10,7 @@ export default async function PermissionsPage() {
   try {
     [roles, permissions] = await Promise.all([getRoles(), getPermissions()]);
   } catch (error) {
+    if (isAccessInterrupt(error)) throw error;
     loadError = error instanceof Error ? error.message : "ไม่สามารถโหลดข้อมูลบทบาทและสิทธิ์ได้";
   }
   return (

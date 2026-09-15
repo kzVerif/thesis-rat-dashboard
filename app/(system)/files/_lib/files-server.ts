@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { getApiUrl } from "@/lib/auth";
+import { interruptForApiStatus } from "@/lib/access-control";
 import type { FilesResponse } from "./types";
 
 const errorByStatus: Record<number, string> = {
@@ -30,6 +31,7 @@ export async function getFiles(page = 1, limit = 20): Promise<FilesResponse> {
   }
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const payload: unknown = await response.json().catch(() => null);
     const apiError = payload && typeof payload === "object"
       ? (payload as { error?: unknown }).error

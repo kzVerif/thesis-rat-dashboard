@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { getApiUrl } from "@/lib/auth";
+import { interruptForApiStatus } from "@/lib/access-control";
 import type { Permission, Role, RoleInput } from "./types";
 
 type RolesResponse = { roles: Role[] };
@@ -31,6 +32,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const payload: unknown = await response.json().catch(() => null);
     const backendMessage = payload && typeof payload === "object"
       ? (payload as { error?: unknown; message?: unknown }).error ?? (payload as { message?: unknown }).message

@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { getApiUrl } from "@/lib/auth";
+import { interruptForApiStatus } from "@/lib/access-control";
 import type { CreateRoomResponse, Room, RoomInput, RoomsResponse } from "./types";
 
 const errorByStatus: Record<number, string> = {
@@ -37,6 +38,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const payload: unknown = await response.json().catch(() => null);
     const apiError = payload && typeof payload === "object"
       ? (payload as { error?: unknown }).error

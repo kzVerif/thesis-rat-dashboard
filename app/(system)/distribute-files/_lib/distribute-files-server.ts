@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { getApiUrl } from "@/lib/auth";
+import { interruptForApiStatus } from "@/lib/access-control";
 import type { DistributionSnapshot } from "./types";
 
 type ApiFile = {
@@ -45,6 +46,9 @@ async function request<T>(path: string, cookie: string): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      interruptForApiStatus(response.status);
+    }
     const payload: unknown = await response.json().catch(() => null);
     const apiError = payload && typeof payload === "object"
       ? (payload as { error?: unknown }).error

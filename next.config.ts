@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "*.devtunnels.ms",
   ],
   experimental: {
+    authInterrupts: true,
     serverActions: {
       // Next compares Origin with Host/X-Forwarded-Host for Server Actions.
       // Keep this list limited to local development hosts.

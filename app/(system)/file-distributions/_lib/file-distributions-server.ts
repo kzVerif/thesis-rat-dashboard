@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { getApiUrl } from "@/lib/auth";
+import { interruptForApiStatus } from "@/lib/access-control";
 import { z } from "zod";
 import { distributionJobStatuses, distributionTargetStatuses, type DistributionListSummary, type DistributionPagination, type FileDistributionJob } from "@/lib/file-distribution";
 
@@ -25,6 +26,7 @@ async function request(path: string) {
   catch { throw new Error("ไม่สามารถเชื่อมต่อกับระบบหลังบ้านได้"); }
   if (response.status === 404) throw new DistributionNotFoundError("distribution job not found");
   if (!response.ok) {
+    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const payload: unknown = await response.json().catch(() => null);
     const message = payload && typeof payload === "object" && typeof (payload as { error?: unknown }).error === "string" ? (payload as { error: string }).error : `Backend returned HTTP ${response.status}`;
     throw new Error(message);

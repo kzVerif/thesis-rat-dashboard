@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAgents } from "../../agents/_lib/agents-server";
 import { getRooms } from "../../rooms/_lib/room-server";
+import { isAccessInterrupt } from "@/lib/access-control";
 import type { ScanSnapshot } from "./types";
 
 export async function getScanSnapshot(): Promise<ScanSnapshot> {
@@ -30,6 +31,7 @@ export async function getScanSnapshot(): Promise<ScanSnapshot> {
       })),
     };
   } catch (error) {
+    if (isAccessInterrupt(error)) throw error;
     return { rooms: [], computers: [], error: error instanceof Error ? error.message : "โหลดข้อมูลห้องและเครื่องไม่สำเร็จ" };
   }
 }
