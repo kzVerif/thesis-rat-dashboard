@@ -11,7 +11,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 import {
   refreshAgentAction,
-  shutdownAgentAction,
 } from "@/actions/agent-detail";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +28,8 @@ import type {
   AgentStatus,
   PerformanceSample,
 } from "../_lib/types";
+
+import ShutdownAgentDialog from "../../_components/ShutdownAgentDialog";
 
 type PerformanceConnection = "connecting" | "live" | "reconnecting" | "offline" | "error";
 
@@ -288,28 +289,6 @@ export default function AgentDetailDashboard({
     setKillTarget(null);
   };
 
-  const shutdown = () => {
-    startTransition(async () => {
-      const result = await shutdownAgentAction(agent.id);
-      if (!result.ok) {
-        toast.error("ส่งคำสั่งปิดเครื่องไม่สำเร็จ", { description: result.error });
-        return;
-      }
-      toast.success("ส่งคำสั่งปิดเครื่องแล้ว", { description: agent.name });
-      setAgent((current) => ({
-        ...current,
-        status: "OFFLINE",
-        lastSeen: new Date().toISOString(),
-        processes: [],
-        performance: {
-          ...current.performance,
-          cpu: 0,
-          ram: { ...current.performance.ram, usedGb: 0, percent: 0 },
-        },
-      }));
-      setShutdownOpen(false);
-    });
-  };
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5">
@@ -458,23 +437,12 @@ export default function AgentDetailDashboard({
         </aside>
       </section>
 
-      <Dialog open={shutdownOpen} onOpenChange={setShutdownOpen}>
-        <DialogContent className="font-kanit sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>ยืนยันการปิดเครื่อง</DialogTitle>
-            <DialogDescription>
-              ระบบจะส่งคำสั่งปิดเครื่องไปยัง {agent.name} การเชื่อมต่อจะสิ้นสุดทันที
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShutdownOpen(false)}>ยกเลิก</Button>
-            <Button variant="destructive" disabled={isPending} onClick={shutdown}>
-              <HugeiconsIcon icon={ShutDownIcon} className="size-4" />
-              ยืนยันปิดเครื่อง
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {shutdownOpen && <ShutdownAgentDialog
+        key={agent.id}
+        agent={{ id: agent.id, hostname: agent.name, ip_address: agent.ip, status: agent.status }}
+        roomName={agent.room?.name ?? "ยังไม่ได้จัดห้อง"}
+        onOpenChange={setShutdownOpen}
+      />}
 
       <Dialog open={killTarget !== null} onOpenChange={(open) => !open && setKillTarget(null)}>
         <DialogContent className="font-kanit sm:max-w-md">

@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowRight01Icon, ComputerIcon, Delete02Icon, Edit03Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, ComputerIcon, Delete02Icon, Edit03Icon, Search01Icon, ShutDownIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 import { deleteAgentAction, updateAgentAction } from "@/actions/agents";
@@ -12,6 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Agent, AgentInput, AgentsPagination, AgentStatus } from "../_lib/types";
 import type { Room } from "../../rooms/_lib/types";
+
+import ShutdownAgentDialog from "./ShutdownAgentDialog";
+import { canShutdownAgent } from "@/lib/power-control";
 
 type FormValues = { hostname: string; roomId: string };
 
@@ -32,6 +35,7 @@ export default function AgentManagement({ initialAgents, rooms, pagination }: { 
   const [total, setTotal] = useState(pagination.total);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Agent | null>(null);
+  const [shuttingDown, setShuttingDown] = useState<Agent | null>(null);
   const [deleting, setDeleting] = useState<Agent | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -72,11 +76,12 @@ export default function AgentManagement({ initialAgents, rooms, pagination }: { 
       </div>
       {visible.length === 0 ? <Empty /> : <>
         <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[1100px] text-sm"><thead className="bg-slate-50/80 text-left text-xs text-slate-500 dark:bg-slate-950/40"><tr>{["ชื่อเครื่อง", "ห้อง", "หมายเลข MAC", "หมายเลข IP", "ระบบปฏิบัติการ", "สถานะ", "พบล่าสุด", "จัดการ"].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visible.map((agent) => <tr key={agent.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"><td className="px-4 py-4 font-semibold">{agent.hostname}</td><td className="max-w-44 truncate px-4 py-4">{roomLabel(agent.room_id, rooms)}</td><td className="px-4 py-4 font-mono text-xs">{agent.mac_address ?? "—"}</td><td className="px-4 py-4 font-mono text-xs">{agent.ip_address ?? "—"}</td><td className="px-4 py-4">{osLabel(agent.os_info)}</td><td className="px-4 py-4"><StatusBadge status={agent.status} /></td><td className="px-4 py-4 text-xs text-slate-500">{dateLabel(agent.last_seen)}</td><td className="px-4 py-4"><Actions agent={agent} onEdit={setEditing} onDelete={setDeleting} /></td></tr>)}</tbody></table></div>
-        <div className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden">{visible.map((agent) => <article key={agent.id} className="p-4"><div className="flex items-start gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><HugeiconsIcon icon={ComputerIcon} className="size-5" /></span><div className="min-w-0 flex-1"><h3 className="truncate font-semibold">{agent.hostname}</h3><p className="mt-1 truncate text-xs text-slate-500">{agent.ip_address ?? "ไม่มี IP address"}</p></div><StatusBadge status={agent.status} /></div><div className="mt-4"><Actions agent={agent} onEdit={setEditing} onDelete={setDeleting} /></div></article>)}</div>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visible.map((agent) => <tr key={agent.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"><td className="px-4 py-4 font-semibold">{agent.hostname}</td><td className="max-w-44 truncate px-4 py-4">{roomLabel(agent.room_id, rooms)}</td><td className="px-4 py-4 font-mono text-xs">{agent.mac_address ?? "—"}</td><td className="px-4 py-4 font-mono text-xs">{agent.ip_address ?? "—"}</td><td className="px-4 py-4">{osLabel(agent.os_info)}</td><td className="px-4 py-4"><StatusBadge status={agent.status} /></td><td className="px-4 py-4 text-xs text-slate-500">{dateLabel(agent.last_seen)}</td><td className="px-4 py-4"><Actions agent={agent} onEdit={setEditing} onDelete={setDeleting} onShutdown={setShuttingDown} /></td></tr>)}</tbody></table></div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden">{visible.map((agent) => <article key={agent.id} className="p-4"><div className="flex items-start gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><HugeiconsIcon icon={ComputerIcon} className="size-5" /></span><div className="min-w-0 flex-1"><h3 className="truncate font-semibold">{agent.hostname}</h3><p className="mt-1 truncate text-xs text-slate-500">{agent.ip_address ?? "ไม่มี IP address"}</p></div><StatusBadge status={agent.status} /></div><div className="mt-4"><Actions agent={agent} onEdit={setEditing} onDelete={setDeleting} onShutdown={setShuttingDown} /></div></article>)}</div>
       </>}
       <PaginationFooter pagination={{ ...pagination, total }} visibleCount={visible.length} />
     </section>
+    {shuttingDown && <ShutdownAgentDialog key={shuttingDown.id} agent={shuttingDown} roomName={roomLabel(shuttingDown.room_id, rooms)} onOpenChange={(open) => !open && setShuttingDown(null)} />}
     {editing && <AgentFormDialog key={editing.id} open onOpenChange={(open) => !open && setEditing(null)} agent={editing} rooms={rooms} pending={pending} onSubmit={update} />}
     <Dialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}><DialogContent className="font-kanit sm:max-w-md"><DialogHeader><DialogTitle>ยืนยันการลบ Agent</DialogTitle><DialogDescription>การลบ {deleting?.hostname} จะลบ commands ที่เกี่ยวข้องด้วย และไม่สามารถย้อนกลับได้</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDeleting(null)} disabled={pending}>ยกเลิก</Button><Button variant="destructive" onClick={remove} disabled={pending}>{pending ? "กำลังลบ..." : "ยืนยันลบ"}</Button></DialogFooter></DialogContent></Dialog>
   </>;
@@ -127,7 +132,7 @@ function PaginationFooter({ pagination, visibleCount }: { pagination: AgentsPagi
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="space-y-2"><Label>{label}</Label>{children}</div>; }
 function Empty() { return <div className="flex min-h-64 flex-col items-center justify-center p-6 text-center"><HugeiconsIcon icon={ComputerIcon} className="mb-3 size-8 text-slate-400" /><h3 className="font-semibold">ไม่พบ Agent</h3><p className="mt-1 text-sm text-slate-500">ยังไม่มีข้อมูลหรือไม่ตรงกับคำค้นหา</p></div>; }
-function Actions({ agent, onEdit, onDelete }: { agent: Agent; onEdit: (agent: Agent) => void; onDelete: (agent: Agent) => void }) { return <div className="flex justify-end gap-2"><Button asChild size="sm" variant="outline"><Link href={`/agents/${agent.id}`}><HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />รายละเอียด</Link></Button><Button size="sm" variant="outline" onClick={() => onEdit(agent)}><HugeiconsIcon icon={Edit03Icon} className="size-4" />แก้ไข</Button><Button size="sm" variant="destructive" onClick={() => onDelete(agent)}><HugeiconsIcon icon={Delete02Icon} className="size-4" />ลบ</Button></div>; }
+function Actions({ agent, onEdit, onDelete, onShutdown }: { agent: Agent; onEdit: (agent: Agent) => void; onDelete: (agent: Agent) => void; onShutdown: (agent: Agent) => void }) { return <div className="flex flex-wrap justify-end gap-2"><Button asChild size="sm" variant="outline"><Link href={`/agents/${agent.id}`}><HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />รายละเอียด</Link></Button><Button size="sm" variant="outline" onClick={() => onEdit(agent)}><HugeiconsIcon icon={Edit03Icon} className="size-4" />แก้ไข</Button><Button size="sm" variant="outline" disabled={!canShutdownAgent(agent.status)} onClick={() => onShutdown(agent)}><HugeiconsIcon icon={ShutDownIcon} className="size-4" />ปิดเครื่อง</Button><Button size="sm" variant="destructive" onClick={() => onDelete(agent)}><HugeiconsIcon icon={Delete02Icon} className="size-4" />ลบ</Button></div>; }
 function StatusBadge({ status }: { status: AgentStatus }) { const color = status === "ONLINE" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : status === "WARNING" ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" : status === "DISABLED" ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"; const labels: Record<AgentStatus, string> = { ONLINE: "ออนไลน์", OFFLINE: "ออฟไลน์", WARNING: "มีคำเตือน", DISABLED: "ปิดใช้งาน" }; return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{labels[status]}</span>; }
 function roomLabel(id: string | null, rooms: Room[]) { if (!id) return "ยังไม่ได้จัดห้อง"; return rooms.find((room) => room.id === id)?.name ?? "ไม่พบข้อมูลห้อง"; }
 function osLabel(value: Record<string, unknown> | null) { if (!value) return "—"; const name = typeof value.name === "string" ? value.name : ""; const version = typeof value.version === "string" ? value.version : ""; return [name, version].filter(Boolean).join(" ") || JSON.stringify(value); }

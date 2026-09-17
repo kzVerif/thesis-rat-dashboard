@@ -22,7 +22,7 @@ export default function RoomCard({ room, onEdit, onDelete, onShutdown }: { room:
       <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
         <Button type="button" size="sm" variant="outline" onClick={() => onEdit(room)}><HugeiconsIcon icon={Edit03Icon} className="mr-1 size-4" />แก้ไข</Button>
         <Button type="button" size="sm" variant="destructive" onClick={() => onDelete(room)}><HugeiconsIcon icon={Delete02Icon} className="mr-1 size-4" />ลบ</Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => onShutdown(room)} disabled={room.agent_count === 0} className="col-span-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"><HugeiconsIcon icon={ShutDownIcon} className="mr-1 size-4" />ปิดเครื่องทั้งหมดในห้อง</Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => onShutdown(room)} disabled={room.online_agent_count === 0} className="col-span-2 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"><HugeiconsIcon icon={ShutDownIcon} className="mr-1 size-4" />ปิดเครื่องทั้งหมดในห้อง</Button>
       </div>
     </article>
   );

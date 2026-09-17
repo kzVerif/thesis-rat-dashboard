@@ -99,16 +99,11 @@ export default function RoomManagement({ initialRooms }: { initialRooms: Room[] 
       <RoomFormDialog open={createOpen} onOpenChange={setCreateOpen} title="เพิ่มห้องใหม่" onSubmit={handleCreate} />
       {editingRoom && <RoomFormDialog key={editingRoom.id} open onOpenChange={(open) => !open && setEditingRoom(null)} title="แก้ไขข้อมูลห้อง" initialRoom={editingRoom} onSubmit={handleEdit} />}
       <DeleteRoomDialog room={deletingRoom} onOpenChange={(open) => !open && setDeletingRoom(null)} onConfirm={handleDelete} />
-      <ShutdownRoomDialog
+      {shutdownRoom && <ShutdownRoomDialog
+        key={shutdownRoom.id}
         room={shutdownRoom}
         onOpenChange={(open) => !open && setShutdownRoom(null)}
-        onConfirm={() => {
-          toast.info("ยังไม่ได้เชื่อมต่อคำสั่งปิดเครื่องกับระบบหลังบ้าน", {
-            description: shutdownRoom ? `${shutdownRoom.name} • ${shutdownRoom.agent_count} Agents` : undefined,
-          });
-          setShutdownRoom(null);
-        }}
-      />
+      />}
     </>
   );
 }
