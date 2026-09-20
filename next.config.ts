@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
     "192.168.1.194",
     "localhost:3000",
     "*.devtunnels.ms",
+    "127.0.0.1",
+    "10.58.208.90",
   ],
   experimental: {
     authInterrupts: true,
