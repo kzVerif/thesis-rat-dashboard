@@ -21,17 +21,17 @@ function isSameOrigin(request: Request) {
   const serverOrigin = host ? `${proto}://${host}` : new URL(request.url).origin;
     console.log("=== DEBUG CSRF CHECK ===");
   // console.log("1. Method:", method);
-  console.log("2. Header Origin:", origin);
-  console.log("3. Calculated Server Origin:", serverOrigin);
-  console.log("4. Header sec-fetch-site:", fetchSite);
-  console.log("5. Is Origin Mismatch?:", Boolean(origin && origin !== serverOrigin));
-  console.log("6. Is Cross-Site?:", fetchSite === "cross-site");
-  console.log("=========================");
+  // console.log("2. Header Origin:", origin);
+  // console.log("3. Calculated Server Origin:", serverOrigin);
+  // console.log("4. Header sec-fetch-site:", fetchSite);
+  // console.log("5. Is Origin Mismatch?:", Boolean(origin && origin !== serverOrigin));
+  // console.log("6. Is Cross-Site?:", fetchSite === "cross-site");
+  // console.log("=========================");
   return (!origin || origin && origin !== serverOrigin) && fetchSite !== "cross-site";
 }
 
 export async function proxyFileRequest(request: Request, backendPath: string) {
-  if (!isSameOrigin(request)) {
+  if (isSameOrigin(request)) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
 
