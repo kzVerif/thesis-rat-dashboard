@@ -3,14 +3,12 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   // Development tunnel/proxy hosts used to access the app remotely.
-  allowedDevOrigins: [
+   allowedDevOrigins: [
     "192.168.1.194",
     "localhost:3000",
     "*.devtunnels.ms",
-    "10.31.26.132",
     "127.0.0.1",
     "10.58.208.90",
-"rat-dashboard.klazy.store",	
   ],
   experimental: {
     authInterrupts: true,
