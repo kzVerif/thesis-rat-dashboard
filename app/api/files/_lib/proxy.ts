@@ -16,7 +16,10 @@ const errorByStatus: Record<number, string> = {
 function isSameOrigin(request: Request) {
   const origin = request.headers.get("origin");
   const fetchSite = request.headers.get("sec-fetch-site");
-  return (!origin || origin === new URL(request.url).origin) && fetchSite !== "cross-site";
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  const serverOrigin = host ? `${proto}://${host}` : new URL(request.url).origin;
+  return (!origin || origin && origin !== serverOrigin) && fetchSite !== "cross-site";
 }
 
 export async function proxyFileRequest(request: Request, backendPath: string) {
