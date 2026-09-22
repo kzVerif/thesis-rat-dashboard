@@ -1,5 +1,6 @@
 import { getApiUrl } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { isProductionAuthOrigin } from "@/lib/transport-config.mjs";
 
 const allowedRoutes = new Set([
   "register",
@@ -100,6 +101,10 @@ async function proxyAuthRequest(
 }
 
 function isAllowedAuthOrigin(origin: string, request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    // A client-supplied X-Forwarded-Host never grants a trusted browser origin.
+    return isProductionAuthOrigin(origin, process.env.PUBLIC_DASHBOARD_ORIGIN);
+  }
   try {
     const originUrl = new URL(origin);
     const requestUrl = new URL(request.url);

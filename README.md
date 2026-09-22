@@ -1,5 +1,7 @@
 # คู่มือการใช้งาน RAT System Dashboard
 
+> Production HTTPS/WSS configuration: see [Transport Security](docs/transport-security.md) and [.env.example](.env.example). Production build/start validates these settings.
+
 เอกสารฉบับนี้จัดทำสำหรับผู้ที่เปิดใช้งานระบบเป็นครั้งแรก โดยอธิบายตั้งแต่การเปิดระบบ การเข้าสู่ระบบ การอ่านข้อมูล ไปจนถึงการจัดการเครื่อง การสั่งสแกนไวรัส การกระจายไฟล์ และการตรวจสอบประวัติการใช้งาน
 
 > **ชื่อระบบ:** RAT System — Remote Administration  

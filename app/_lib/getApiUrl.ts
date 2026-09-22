@@ -1,4 +1,4 @@
-// app/lib/getApiUrl.ts
+import { validateAPIURL } from "@/lib/transport-config.mjs";
 export function getApiUrl() {
-  return process.env.API_URL ?? "http://localhost:8080";
+  return validateAPIURL(process.env.API_URL ?? "http://localhost:8080", process.env.NODE_ENV === "production");
 }

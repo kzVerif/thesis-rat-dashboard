@@ -2,7 +2,13 @@
 
 ใช้ prefix `/api/auth` สำหรับทุก action ที่เกี่ยวกับการสมัครและ session เท่านั้น ห้ามใช้ `/api/users/register`
 
-ทุก request ที่มี body ต้องส่ง `Content-Type: application/json` และใช้ `credentials: 'include'` เพื่อให้ browser ส่ง session cookie ระบบใช้ cookie ชื่อ `session` บน HTTP local และ `__Host-session` บน HTTPS
+ทุก request ที่มี body ต้องส่ง `Content-Type: application/json` และใช้ `credentials: 'include'` เพื่อให้ browser ส่ง session cookie REST Server ปัจจุบันใช้ `__Host-session` เท่านั้น โดยเป็น Secure, HttpOnly, SameSite=Lax และ Path=/; ต้องใช้ HTTPS สำหรับ browser session ไม่มี cookie ชื่อ `session` สำรองบน HTTP
+
+เอกสารนี้กล่าวถึงผู้ใช้ Dashboard ส่วน Agent enrollment ใช้ `POST /api/agents/register`
+พร้อม enrollment token, `agent_id` และ Ed25519 `public_key` ตาม
+[TOKENS_API_DOCS.md](TOKENS_API_DOCS.md) ไม่ใช้ user session
+`GET /api/agents/:id/exists` ไม่พิสูจน์ private-key ownership; Agent WebSocket
+authentication เป็นงาน Phase 4 ไม่ใช่ความสามารถของ enrollment token
 
 ## สมัครผู้ใช้
 

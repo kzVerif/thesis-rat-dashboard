@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import { validateAPIURL } from "./transport-config.mjs";
 
 export type AuthUser = {
   id: string;
@@ -21,7 +22,9 @@ export type AuthSession = {
 };
 
 export function getApiUrl() {
-  return process.env.API_URL?.replace(/\/$/, "");
+  return process.env.API_URL
+    ? validateAPIURL(process.env.API_URL, process.env.NODE_ENV === "production")
+    : undefined;
 }
 
 async function authFetch(path: string) {
