@@ -34,7 +34,7 @@ export const acceptedSchema = z.object({
   agent_id: z.string().optional(), request_id: z.string().optional(), dispatch: z.enum(["sent", "uncertain"]).optional(),
 }).refine(e => !!e.targets?.length || !!(e.agent_id && e.request_id && e.dispatch));
 export const scanErrorSchema = z.object({ type: z.literal("error"), stream: z.literal("virus_scan"), error: z.string() });
-export type ScanJob = { id: string; mode: ScanMode; createdAt: string; path?: string | null; targets: ScanRow[]; expected?: number; complete: boolean; legacy?: boolean; source?: "api" };
+export type ScanJob = { id: string; mode: ScanMode; createdAt: string; path?: string | null; targets: ScanRow[]; expected?: number; complete: boolean; legacy?: boolean; source?: "api" | "realtime" };
 export function mergeScanRows(current: ScanJob[], rows: ScanRow[], completeId?: string): ScanJob[] {
   const jobs = new Map(current.map(job => [job.id, job]));
   for (const row of rows) {

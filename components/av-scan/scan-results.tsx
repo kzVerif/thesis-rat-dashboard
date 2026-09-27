@@ -1,22 +1,24 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { exportScanReport } from "@/lib/scan-report";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ScanSnapshot } from "@/app/(system)/av-scans/_lib/types";
-import { isTerminal, type ScanRow, type ScanStatus } from "@/lib/virus-scan";
-import { loadAvScanResults } from "@/actions/av-scan-results";
+import { isTerminal, jobFinished, type ScanRow, type ScanStatus } from "@/lib/virus-scan";
+import { AvScanRealtimeClient } from "@/lib/av-scan-realtime";
 import { panelClass, ScanBadge } from "./scan-shared";
 
 const statusLabels = {
-  QUEUED: "รอดำเนินการ (PENDING)",
+  QUEUED: "ยังไม่มีหลักฐานการส่ง (QUEUED)",
+  DELIVERED: "ส่งคำสั่งแล้ว (DELIVERED)",
   RUNNING: "กำลังสแกน (RUNNING)",
   SUCCEEDED: "สแกนเสร็จแล้ว (COMPLETED)",
   FAILED: "สแกนไม่สำเร็จ (FAILED)",
   CANCELLED: "ยกเลิกแล้ว (CANCELLED)",
+  EXPIRED: "หมดอายุ (EXPIRED)",
 };
 
 const PAGE_SIZE = 10;
@@ -89,23 +91,7 @@ function Report({ target }: { target: ScanRow }) {
         แสดงรายละเอียด
       </summary>
       <div className="mt-3 space-y-2">
-        <p className="break-all">Result ID: {target.request_id}</p>
-        <p className="break-all">
-          Command ID:{" "}
-          {typeof result?.command_id === "string" ? result.command_id : "—"}
-        </p>
-        {/* <p>
-          ไฟล์ที่สแกน:{" "}
-          {typeof result?.total_files_scanned === "number"
-            ? result.total_files_scanned.toLocaleString("th-TH")
-            : "ไม่มีข้อมูล"}
-        </p>
-        <p>
-          ภัยคุกคามที่พบ:{" "}
-          {typeof result?.threats_found === "number"
-            ? result.threats_found.toLocaleString("th-TH")
-            : "ไม่มีข้อมูล"}
-        </p> */}
+        <p className="break-all">Request / Command ID: {target.request_id}</p>
         <p>สร้าง: {date(target.created_at)}</p>
         <p>เริ่ม: {date(target.started_at)}</p>
         <p>สิ้นสุด: {date(target.finished_at)}</p>
@@ -171,30 +157,19 @@ function Report({ target }: { target: ScanRow }) {
 
 export function ScanResults({
   snapshot,
-  initialResults,
 }: {
   snapshot: ScanSnapshot;
-  initialResults: Awaited<ReturnType<typeof loadAvScanResults>>;
 }) {
-  const [data, setData] = useState(initialResults);
-  const [error, setError] = useState(
-    initialResults.ok ? null : initialResults.error,
+  const [client] = useState(() => new AvScanRealtimeClient(
+    process.env.NEXT_PUBLIC_FRONTEND_WS_URL ?? "",
+    url => new WebSocket(url || `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws/frontend`),
+  ));
+  useEffect(() => client.start(), [client]);
+  const { jobs, summary, connection, loading, active, error, updatedAt } = useSyncExternalStore(
+    client.subscribe, client.getSnapshot, client.getSnapshot,
   );
-  const [loading, startTransition] = useTransition();
-  const jobs = data.ok ? data.jobs : [];
-  const updatedAt = data.ok ? data.updatedAt : null;
-  const refresh = () =>
-    startTransition(async () => {
-      try {
-        const next = await loadAvScanResults();
-        if (next.ok) {
-          setData(next);
-          setError(null);
-        } else setError(next.error);
-      } catch {
-        setError("ไม่สามารถเชื่อมต่อได้ กรุณากด Reload อีกครั้ง");
-      }
-    });
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const refresh = client.refresh;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ScanStatus | "all">("all");
@@ -217,7 +192,6 @@ export function ScanResults({
   );
   const job = jobs.find((j) => j.id === selectedId) ?? jobs[0];
   const computers = new Map(snapshot.computers.map((c) => [c.id, c]));
-  const all = jobs.flatMap((j) => j.targets);
   const visible =
     job?.targets.filter((t) => {
       const computer = computers.get(t.agent_id);
@@ -244,18 +218,18 @@ export function ScanResults({
     currentResultPage * PAGE_SIZE,
   );
   const stats = [
-    { label: "งานในประวัติที่โหลด", value: jobs.length },
+    { label: "งานในประวัติที่โหลด", value: summary.loaded_jobs },
     {
       label: "ผลที่ยังไม่สิ้นสุด",
-      value: all.filter((t) => !isTerminal(t.status)).length,
+      value: summary.pending_results,
     },
     {
       label: "ผลสแกนที่สำเร็จ",
-      value: all.filter((t) => t.status === "SUCCEEDED").length,
+      value: summary.succeeded_results,
     },
     {
       label: "ผลสแกนที่ไม่สำเร็จ",
-      value: all.filter((t) => t.status === "FAILED").length,
+      value: summary.failed_results,
     },
   ];
   return (
@@ -263,7 +237,7 @@ export function ScanResults({
       <header className="space-y-4">
         <h1 className="text-2xl font-bold">ติดตามผล AV Scan</h1>
         <p className="text-sm text-muted-foreground">
-          ผลสแกนรายเครื่อง อัปเดตเมื่อกด Reload
+          ผลสแกนรายเครื่อง อัปเดตอัตโนมัติแบบ realtime
         </p>
         <nav aria-label="AV Scan" className="flex gap-2 border-b pb-4">
           <Button asChild variant="ghost">
@@ -276,16 +250,15 @@ export function ScanResults({
           </Button>
         </nav>
       </header>
-      {/* <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-sm leading-6 text-muted-foreground">
-      สแกนสำเร็จไม่ได้หมายความว่าไม่พบไวรัส กรุณาตรวจจำนวนภัยคุกคามและรายละเอียดผลสแกนของแต่ละเครื่อง
-    </div> */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground" role="status">
-          {loading ? "กำลังโหลดผลสแกน…" : "กด Reload เพื่อขอข้อมูลใหม่"} •
+          {connection === "reconnecting" ? "ขาดการเชื่อมต่อ กำลังเชื่อมต่อใหม่…"
+            : loading ? "กำลังเชื่อมต่อและรอผลสแกน…"
+            : active ? "เชื่อมต่อ realtime แล้ว" : "หยุดรับข้อมูล realtime"} •
           อัปเดตล่าสุด {date(updatedAt)}
         </p>
         <Button variant="outline" disabled={loading} onClick={refresh}>
-          {loading ? "กำลังโหลด…" : "Reload"}
+          {loading ? "กำลังโหลด…" : "เชื่อมต่อ / โหลดใหม่"}
         </Button>
       </div>
       {error && (
@@ -294,7 +267,13 @@ export function ScanResults({
           className="rounded-xl border border-destructive/20 p-4 text-sm text-destructive"
         >
           {error}
-          {data.ok && " • แสดงข้อมูลจากการโหลดสำเร็จครั้งก่อน"}
+          {updatedAt && " • แสดงข้อมูลจากการโหลดสำเร็จครั้งก่อน"}
+        </p>
+      )}
+      {!active && updatedAt && (
+        <p role="status" className="text-sm text-amber-600 dark:text-amber-400">
+          ข้อมูลที่แสดงเป็นข้อมูลล่าสุดที่ได้รับ และยังไม่อัปเดตจนกว่าจะเชื่อมต่อสำเร็จ
+          การขาดการเชื่อมต่อไม่ได้หมายความว่าสแกนล้มเหลว
         </p>
       )}
       {snapshot.error && (
@@ -309,14 +288,14 @@ export function ScanResults({
               {s.label}
             </p>
             <p className="mt-3 text-3xl font-semibold tabular-nums">
-              {s.value}
+              {updatedAt ? s.value : "—"}
             </p>
           </div>
         ))}
       </div>
       <p className="text-xs text-muted-foreground">
-        แสดงผลสแกนที่มีสิทธิ์เข้าถึง รวมทุกหน้าจาก API และจัดกลุ่มตามงาน หน้าละ
-        10 รายการ จำนวนผลที่พบอาจไม่เท่ากับจำนวนเครื่องที่สั่งงานทั้งหมด
+        แสดงงานล่าสุดของคุณสูงสุด 100 งาน พร้อมผลทุกเครื่องในแต่ละงาน แบ่งแสดงหน้าละ 10 รายการ
+        ยอดสรุปนับเฉพาะงานที่โหลดมา โดยผลไม่สำเร็จรวมยกเลิกและหมดอายุ
       </p>
       <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
         <aside className={panelClass + " h-fit"}>
@@ -367,8 +346,8 @@ export function ScanResults({
                   {date(j.createdAt)}
                 </span>
                 <span className="mt-3 block text-xs">
-                  {j.targets.every((t) => isTerminal(t.status))
-                    ? "ผลที่โหลดมาสิ้นสุดแล้ว"
+                  {j.targets.length === 0 ? "ไม่มีผลรายเครื่อง" : jobFinished(j)
+                    ? "สิ้นสุดแล้วทุกเครื่อง"
                     : "มีผลที่รอดำเนินการ / กำลังสแกน"}
                 </span>
               </button>
@@ -397,26 +376,46 @@ export function ScanResults({
                   Job ID: {job.id}
                 </p>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  try {
-                    exportScanReport(job, snapshot.computers);
-                  } catch (error) {
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : "เปิดรายงานไม่สำเร็จ กรุณาลองอีกครั้ง",
-                    );
-                  }
-                }}
-              >
-                Export PDF
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={exportingExcel || !job.targets.length}
+                  onClick={async () => {
+                    setExportingExcel(true);
+                    try {
+                      const { exportScanExcel } = await import("@/lib/scan-excel");
+                      await exportScanExcel(job, snapshot.computers);
+                    } catch {
+                      toast.error("ส่งออก Excel ไม่สำเร็จ กรุณาลองอีกครั้ง");
+                    } finally {
+                      setExportingExcel(false);
+                    }
+                  }}
+                >
+                  {exportingExcel ? "กำลังส่งออก..." : "Export Excel"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    try {
+                      exportScanReport(job, snapshot.computers);
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "เปิดรายงานไม่สำเร็จ กรุณาลองอีกครั้ง",
+                      );
+                    }
+                  }}
+                >
+                  Export PDF
+                </Button>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Export PDF รวมผลที่โหลดได้ทั้งหมดของงานนี้ จากนั้นเลือก
-              “บันทึกเป็น PDF” ในหน้าต่างพิมพ์
+              Export Excel และ PDF รวมผลที่โหลดได้ทั้งหมดของงานนี้
+              ไม่จำกัดตามตัวกรองหรือหน้าตาราง โดย Excel ดาวน์โหลดเป็นไฟล์ .xlsx
+              ส่วน PDF ให้เลือก “บันทึกเป็น PDF” ในหน้าต่างพิมพ์
             </p>
             {job.path && (
               <div className="rounded-lg bg-muted/50 p-3 text-sm">
@@ -447,8 +446,8 @@ export function ScanResults({
               </span>
             </div>
             <p className="text-sm text-amber-600 dark:text-amber-400">
-              API ผลสแกนไม่ระบุจำนวนเครื่องที่สั่งทั้งหมด
-              จึงยังยืนยันไม่ได้ว่าครบทั้งงาน
+              สแกนสำเร็จไม่ได้ยืนยันว่าไม่พบไวรัส โปรดอ่าน Output จาก Agent
+              ระบบนี้ไม่รายงานจำนวนไฟล์หรือจำนวนภัยคุกคาม
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Input
@@ -458,7 +457,7 @@ export function ScanResults({
                   setQuery(e.target.value);
                   setResultPage(1);
                 }}
-                placeholder="ค้นหาชื่อเครื่อง, IP, ห้อง หรือ Result ID"
+                placeholder="ค้นหาชื่อเครื่อง, IP, ห้อง หรือ Request ID"
               />
               <select
                 aria-label="กรองสถานะสแกน"
@@ -573,8 +572,9 @@ export function ScanResults({
               panelClass + " h-fit text-center text-sm text-muted-foreground"
             }
           >
-            {error
-              ? "โหลดผลสแกนไม่สำเร็จ กด Reload เพื่อลองอีกครั้ง"
+            {loading || connection === "reconnecting"
+              ? "กำลังรอข้อมูลผลสแกน…"
+              : error ? "โหลดผลสแกนไม่สำเร็จ กดเชื่อมต่อ / โหลดใหม่เพื่อลองอีกครั้ง"
               : "ยังไม่มีผลสแกน"}
           </div>
         )}

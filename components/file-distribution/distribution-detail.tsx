@@ -51,14 +51,19 @@ export function DistributionDetail({ initialJob }: { initialJob: FileDistributio
     });
   }, [connection, hydrateJobs, initialJob.id]);
 
-  const counts = countStatuses(agents);
+  const hasAllTargets = agents.length === job.totalTargets;
+  const counts = hasAllTargets ? countStatuses(agents) : {
+    completed: job.completedTargets, downloading: job.downloadingTargets,
+    failed: job.failedTargets, offline: job.offlineTargets,
+  };
   const completion = job.totalTargets ? counts.completed / job.totalTargets * 100 : 0;
-  const transfer = agents.length ? agents.reduce((sum, agent) => sum + agent.progress, 0) / agents.length : 0;
+  const transfer = job.totalTargets ? agents.reduce((sum, agent) => sum + agent.progress, 0) / job.totalTargets : 0;
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const paginated = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   return <div className="mx-auto w-full max-w-[1500px] space-y-6">
+    {!hasAllTargets && <p className="rounded-xl border bg-muted/50 p-3 text-xs text-muted-foreground">ได้รับรายละเอียด {agents.length} จาก {job.totalTargets} เครื่อง สรุปสถานะใช้ข้อมูลล่าสุดจากเซิร์ฟเวอร์ ความคืบหน้าการรับส่งอาจยังไม่ครบ</p>}
     <header className="rounded-3xl border bg-gradient-to-br from-card to-blue-50/70 p-5 shadow-sm dark:to-blue-950/20 sm:p-7"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div className="min-w-0"><Link href="/file-distributions" className="text-sm font-medium text-blue-600 hover:underline">← กลับไปหน้ารายการ</Link><div className="mt-4 flex flex-wrap items-center gap-3"><h1 className="break-all text-2xl font-bold sm:text-3xl">{job.filename}</h1><DistributionStatusBadge status={job.status} /></div><dl className="mt-5 grid gap-x-6 gap-y-3 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4"><Meta label="รหัสงาน" value={job.id} mono /><Meta label="เริ่มงานเมื่อ" value={new Date(job.createdAt).toLocaleString("th-TH")} /><Meta label="ปลายทาง" value={job.targetLabel} /><Meta label="ขนาดไฟล์" value={formatBytes(job.fileSize)} /></dl></div><DistributionConnectionBadge state={connection} /></div></header>
     {connection !== "live" && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">Realtime ขาดการเชื่อมต่อ ข้อมูล snapshot ล่าสุดยังคงแสดงอยู่ ระบบจะโหลดสถานะจาก Backend ใหม่เมื่อเชื่อมต่อสำเร็จ</p>}
     <section className="rounded-2xl border bg-card p-5 shadow-sm sm:p-6"><div className="flex items-end justify-between gap-4"><div><h2 className="font-semibold">ความคืบหน้าโดยรวม</h2><p className="mt-1 text-xs text-muted-foreground">ดำเนินการสำเร็จ {counts.completed} จาก {job.totalTargets} เครื่อง</p></div><strong className="text-3xl tabular-nums text-blue-600">{Math.round(completion)}%</strong></div><div className="mt-5"><DistributionProgress value={completion} label="ความคืบหน้าโดยรวม" /></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">เครื่องที่เสร็จสิ้น</p><p className="mt-1 font-semibold tabular-nums">{counts.completed} / {job.totalTargets}</p></div><div className="rounded-xl bg-muted/50 p-3"><p className="text-xs text-muted-foreground">ความคืบหน้าการรับส่งเฉลี่ย</p><p className="mt-1 font-semibold tabular-nums">{Math.round(transfer)}%</p></div></div></section>

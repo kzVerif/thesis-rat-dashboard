@@ -23,6 +23,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { toast } from "sonner";
 import type { DistributionSnapshot } from "../_lib/types";
 import { useFileDistribution } from "@/components/file-distribution/file-distribution-provider";
+import { validateDestinationPath } from "@/lib/file-distribution";
 
 type TargetType = "computer" | "room";
 
@@ -32,7 +33,7 @@ export default function DistributeFilesClient({
   snapshot: DistributionSnapshot;
 }) {
   const { files, computers, rooms } = snapshot;
-  const { connection, distribute } = useFileDistribution();
+  const { connection, distribute, pending } = useFileDistribution();
   const targetOptions = useMemo(
     () => ({ computer: computers, room: rooms }),
     [computers, rooms],
@@ -40,6 +41,9 @@ export default function DistributeFilesClient({
   const [selectedFileId, setSelectedFileId] = useState("");
   const [targetType, setTargetType] = useState<TargetType>("computer");
   const [selectedTargetId, setSelectedTargetId] = useState("");
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [destinationPath, setDestinationPath] = useState("");
+  const pathError = validateDestinationPath(destinationPath);
   const [query, setQuery] = useState("");
   const [targetQuery, setTargetQuery] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -54,9 +58,10 @@ export default function DistributeFilesClient({
   }, [files, query]);
 
   const selectedFile = files.find((file) => file.id === selectedFileId);
-  const selectedTarget = targetOptions[targetType].find(
-    (target) => target.id === selectedTargetId
-  );
+  const selectedComputers = computers.filter((computer) => selectedAgentIds.includes(computer.id));
+  const selectedTarget = targetType === "computer"
+    ? (selectedComputers.length ? { id: "", name: selectedComputers.map((computer) => computer.name).join(", "), description: `${selectedComputers.length} เครื่อง` } : undefined)
+    : rooms.find((room) => room.id === selectedTargetId);
   const visibleTargets = useMemo(() => {
     const normalizedQuery = targetQuery.trim().toLocaleLowerCase();
     if (!normalizedQuery) return targetOptions[targetType];
@@ -70,28 +75,30 @@ export default function DistributeFilesClient({
   const handleTargetTypeChange = (type: TargetType) => {
     setTargetType(type);
     setSelectedTargetId("");
+    setSelectedAgentIds([]);
     setTargetQuery("");
     setSubmitted(false);
   };
 
   const handleOpenConfirmation = () => {
-    if (!selectedFile || !selectedTarget) return;
+    if (!selectedFile || !selectedTarget || pathError || pending) return;
     setConfirmOpen(true);
   };
 
   const handleConfirmDistribute = () => {
-    if (!selectedFile || !selectedTarget) return;
+    if (!selectedFile || !selectedTarget || pathError || pending) return;
     const targetedComputers = targetType === "computer"
-      ? computers.filter((computer) => computer.id === selectedTarget.id)
+      ? selectedComputers
       : computers.filter((computer) => computer.roomId === selectedTarget.id);
     try {
       distribute({
         fileId: selectedFile.id,
+        destinationPath,
         filename: selectedFile.name,
         fileSize: selectedFile.sizeBytes,
         targetLabel: selectedTarget.name,
         target: targetType === "computer"
-          ? { type: "AGENTS", agent_ids: [selectedTarget.id] }
+          ? { type: "AGENTS", agent_ids: selectedComputers.map((computer) => computer.id) }
           : { type: "ROOM", room_id: selectedTarget.id },
         computers: targetedComputers.map((computer) => ({
           id: computer.id,
@@ -215,7 +222,7 @@ export default function DistributeFilesClient({
               เลือกประเภทปลายทาง
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              ส่งไปยังเครื่องเดียว หรือส่งไปยังทุกเครื่องภายในห้อง
+              ส่งไปยังเครื่องที่เลือกหลายเครื่อง หรือทุกเครื่องภายในห้อง
             </p>
 
             <div className="mt-4 grid gap-3 min-[480px]:grid-cols-2">
@@ -269,13 +276,16 @@ export default function DistributeFilesClient({
             <div className="mt-4 max-h-[min(460px,50dvh)] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 p-2 dark:border-slate-800 sm:p-3">
               <div className="grid gap-2 min-[520px]:grid-cols-2 xl:grid-cols-3">
               {visibleTargets.map((target) => {
-                const isSelected = selectedTargetId === target.id;
+                const isSelected = targetType === "computer" ? selectedAgentIds.includes(target.id) : selectedTargetId === target.id;
                 return (
                   <button
                     key={target.id}
                     type="button"
+                    aria-pressed={isSelected}
                     onClick={() => {
-                      setSelectedTargetId(target.id);
+                      if (targetType === "computer") {
+                        setSelectedAgentIds((current) => current.includes(target.id) ? current.filter((id) => id !== target.id) : [...current, target.id]);
+                      } else setSelectedTargetId(target.id);
                       setSubmitted(false);
                     }}
                     className={`flex min-h-16 min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
@@ -311,7 +321,19 @@ export default function DistributeFilesClient({
             </div>
             <p className="mt-3 text-xs text-slate-500">
               แสดง {visibleTargets.length} จาก {targetOptions[targetType].length} รายการ
+              {targetType === "computer" && ` • เลือกแล้ว ${selectedComputers.length} เครื่อง`}
             </p>
+            {targetType === "room" && <p className="mt-2 text-xs text-slate-500">ใช้รายชื่อเครื่องในห้อง ณ เวลาสร้างงาน การย้ายเครื่องภายหลังไม่เปลี่ยนปลายทางของงานนี้</p>}
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <StepLabel number={4} />
+            <label htmlFor="destination-path" className="mt-2 block text-lg font-semibold">โฟลเดอร์ปลายทางบนเครื่อง Agent</label>
+            <Input id="destination-path" value={destinationPath} onChange={(event) => { setDestinationPath(event.target.value); setSubmitted(false); }}
+              placeholder="D:\Shared Files\Lessons หรือ /srv/shared" className="mt-3 font-mono" aria-invalid={Boolean(pathError)} aria-describedby="destination-help destination-error" />
+            <p id="destination-help" className="mt-2 text-xs leading-5 text-slate-500">เว้นว่างเพื่อใช้โฟลเดอร์เริ่มต้น ระบุเฉพาะโฟลเดอร์ ไม่รวมชื่อไฟล์ และใช้กับทุกเครื่องที่เลือก ไม่รองรับ relative/network/device path หรือส่วน . และ .. และไม่ขยาย %USERPROFILE% หรือ ~</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">Agent ต้องรองรับโฟลเดอร์ปลายทาง รุ่นเก่าอาจบันทึกที่โฟลเดอร์เดิม ระบบตรวจไม่ได้ว่าโฟลเดอร์มีอยู่หรือเขียนได้บนเครื่องปลายทาง</p>
+            <p id="destination-error" role="alert" className="mt-2 text-sm text-red-600">{pathError}</p>
           </section>
         </div>
 
@@ -333,6 +355,7 @@ export default function DistributeFilesClient({
                 label="ปลายทาง"
                 value={selectedTarget?.name || "ยังไม่ได้เลือก"}
               />
+              <SummaryRow label="โฟลเดอร์ปลายทาง" value={destinationPath || "โฟลเดอร์เริ่มต้นของ Agent"} />
             </div>
 
             {submitted && (
@@ -344,12 +367,12 @@ export default function DistributeFilesClient({
             <Button
               type="button"
               size="lg"
-              disabled={!selectedFile || !selectedTarget || connection !== "live"}
+              disabled={!selectedFile || !selectedTarget || Boolean(pathError) || pending || connection !== "live"}
               onClick={handleOpenConfirmation}
               className="mt-5 h-11 w-full bg-blue-600 text-sm text-white hover:bg-blue-700"
             >
               <HugeiconsIcon icon={FileExportIcon} className="mr-2 size-5" />
-              กระจายไฟล์
+              {pending ? "กำลังรอยืนยันการสร้างงาน…" : "กระจายไฟล์"}
             </Button>
             <p className="mt-3 text-center text-xs leading-5 text-slate-500">
               กรุณาตรวจสอบไฟล์และปลายทางก่อนเริ่มดำเนินการ
@@ -413,6 +436,7 @@ export default function DistributeFilesClient({
                   label="รายละเอียดปลายทาง"
                   value={selectedTarget.description}
                 />
+                <ConfirmationRow label="โฟลเดอร์ปลายทาง" value={destinationPath || "โฟลเดอร์เริ่มต้นของ Agent"} />
               </dl>
             </div>
           )}
@@ -429,6 +453,7 @@ export default function DistributeFilesClient({
             <Button
               type="button"
               onClick={handleConfirmDistribute}
+              disabled={pending || connection !== "live" || Boolean(pathError)}
               className="h-10 w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto"
             >
               <HugeiconsIcon icon={FileExportIcon} className="mr-1.5 size-4" />
