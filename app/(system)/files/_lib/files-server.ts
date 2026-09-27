@@ -31,7 +31,7 @@ export async function getFiles(page = 1, limit = 20): Promise<FilesResponse> {
   }
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
+    // if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const payload: unknown = await response.json().catch(() => null);
     const apiError = payload && typeof payload === "object"
       ? (payload as { error?: unknown }).error

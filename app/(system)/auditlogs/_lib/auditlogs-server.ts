@@ -14,7 +14,7 @@ async function request(path: string): Promise<unknown> {
     response = await fetch(`${apiUrl}/api/logs${path}`, { headers: { cookie: `${session.name}=${session.value}` }, cache: "no-store", signal: AbortSignal.timeout(30000) });
   } catch { throw new Error("ไม่สามารถเชื่อมต่อกับระบบหลังบ้านได้ กรุณาลองอีกครั้ง"); }
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
+    // if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const errors: Record<number, string> = { 400: "ตัวกรองหรือรหัสรายการไม่ถูกต้อง", 401: "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่", 403: "บัญชีนี้ไม่มีสิทธิ์อ่านประวัติการใช้งาน (logs.read)", 404: "ไม่พบรายการประวัติที่ต้องการ รายการอาจถูกลบตามอายุการเก็บข้อมูลแล้ว กรุณารีเฟรชรายการ", 429: "เรียกข้อมูลถี่เกินไป กรุณารอสักครู่แล้วลองอีกครั้ง", 500: "ไม่สามารถโหลดประวัติการใช้งานได้ กรุณาลองอีกครั้ง" };
     throw new Error(errors[response.status] ?? `โหลดข้อมูลไม่สำเร็จ (HTTP ${response.status})`);
   }

@@ -19,7 +19,7 @@ function isSameOrigin(request: Request) {
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
   const proto = request.headers.get("x-forwarded-proto") || "https";
   const serverOrigin = host ? `${proto}://${host}` : new URL(request.url).origin;
-    console.log("=== DEBUG CSRF CHECK ===");
+    // console.log("=== DEBUG CSRF CHECK ===");
   // console.log("1. Method:", method);
   // console.log("2. Header Origin:", origin);
   // console.log("3. Calculated Server Origin:", serverOrigin);

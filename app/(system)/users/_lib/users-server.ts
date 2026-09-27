@@ -37,7 +37,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
+    // if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const payload: unknown = await response.json().catch(() => null);
     const apiError = payload && typeof payload === "object" ? (payload as { error?: unknown }).error : null;
     const fallback = errors[response.status] || `Backend returned HTTP ${response.status}`;

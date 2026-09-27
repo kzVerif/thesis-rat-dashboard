@@ -11,7 +11,7 @@ export async function getTokensSnapshot(): Promise<TokensSnapshot> {
     const session = (await cookies()).get("__Host-session");
     if (!session) throw new Error("เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่");
     const response = await fetch(`${apiUrl}/api/tokens`, { headers: { cookie: `${session.name}=${session.value}` }, cache: "no-store", signal: AbortSignal.timeout(30000) });
-    if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
+    // if (response.status === 401 || response.status === 403) interruptForApiStatus(response.status);
     const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) throw new Error(tokenErrorMessage(response.status, payload));
     const parsed = tokensSchema.safeParse(payload);
