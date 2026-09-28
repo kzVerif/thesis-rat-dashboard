@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,9 @@ export default function DistributeFilesClient({
   const [selectedTargetId, setSelectedTargetId] = useState("");
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [destinationPath, setDestinationPath] = useState("");
+  const destinationInputRef = useRef<HTMLInputElement>(null);
+  const [pathWarningOpen, setPathWarningOpen] = useState(false);
+  const [pathWarningAcknowledged, setPathWarningAcknowledged] = useState(false);
   const pathError = validateDestinationPath(destinationPath);
   const [query, setQuery] = useState("");
   const [targetQuery, setTargetQuery] = useState("");
@@ -329,8 +332,17 @@ export default function DistributeFilesClient({
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <StepLabel number={4} />
             <label htmlFor="destination-path" className="mt-2 block text-lg font-semibold">โฟลเดอร์ปลายทางบนเครื่อง Agent</label>
-            <Input id="destination-path" value={destinationPath} onChange={(event) => { setDestinationPath(event.target.value); setSubmitted(false); }}
-              placeholder="D:\Shared Files\Lessons หรือ /srv/shared" className="mt-3 font-mono" aria-invalid={Boolean(pathError)} aria-describedby="destination-help destination-error" />
+            <Input id="destination-path" ref={destinationInputRef} value={destinationPath}
+              readOnly={!pathWarningAcknowledged}
+              onFocus={() => { if (!pathWarningAcknowledged) setPathWarningOpen(true); }}
+              onClick={() => { if (!pathWarningAcknowledged) setPathWarningOpen(true); }}
+              onChange={(event) => { setDestinationPath(event.target.value); setSubmitted(false); }}
+              placeholder="D:\Shared Files\Lessons หรือ D:/Shared Files/Lessons" className="mt-3 font-mono" aria-invalid={Boolean(pathError)} aria-describedby="destination-warning destination-help destination-error" />
+            <div id="destination-warning" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <p className="font-semibold">ตรวจสอบพาธให้ถูกต้องก่อนกรอก</p>
+              <p>โปรดตรวจสอบให้แน่ใจว่าโฟลเดอร์ดังกล่าวมีอยู่จริงบนเครื่องปลายทางทุกเครื่องที่เลือก ระบบอนุญาตเฉพาะพาธภายใต้ไดรฟ์ D: เท่านั้น</p>
+              <p>ตัวอย่าง: <code className="break-all font-mono">D:\Shared Files\Lessons</code> หรือ <code className="break-all font-mono">D:/Shared Files/Lessons</code></p>
+            </div>
             <p id="destination-help" className="mt-2 text-xs leading-5 text-slate-500">เว้นว่างเพื่อใช้โฟลเดอร์เริ่มต้น ระบุเฉพาะโฟลเดอร์ ไม่รวมชื่อไฟล์ และใช้กับทุกเครื่องที่เลือก ไม่รองรับ relative/network/device path หรือส่วน . และ .. และไม่ขยาย %USERPROFILE% หรือ ~</p>
             <p className="mt-2 text-xs leading-5 text-slate-500">Agent ต้องรองรับโฟลเดอร์ปลายทาง รุ่นเก่าอาจบันทึกที่โฟลเดอร์เดิม ระบบตรวจไม่ได้ว่าโฟลเดอร์มีอยู่หรือเขียนได้บนเครื่องปลายทาง</p>
             <p id="destination-error" role="alert" className="mt-2 text-sm text-red-600">{pathError}</p>
@@ -380,6 +392,36 @@ export default function DistributeFilesClient({
           </div>
         </aside>
       </div>
+
+      <Dialog open={pathWarningOpen} onOpenChange={setPathWarningOpen}>
+        <DialogContent
+          className="max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 font-kanit sm:max-w-lg sm:p-6"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (pathWarningAcknowledged) destinationInputRef.current?.focus();
+            else destinationInputRef.current?.blur();
+          }}
+        >
+          <DialogHeader className="pr-7">
+            <DialogTitle>โปรดอ่านก่อนกรอกพาธปลายทาง</DialogTitle>
+            <DialogDescription className="text-sm leading-6">
+              ตรวจสอบพาธให้ถูกต้อง และมั่นใจว่าโฟลเดอร์ดังกล่าวมีอยู่จริงบนเครื่องปลายทางทุกเครื่องที่เลือกก่อนกรอก
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="font-semibold">ระบบอนุญาตเฉพาะพาธภายใต้ไดรฟ์ D: เท่านั้น</p>
+            <p>ตัวอย่าง: <code className="break-all font-mono">D:\Shared Files\Lessons</code> หรือ <code className="break-all font-mono">D:/Shared Files/Lessons</code></p>
+          </div>
+          <p className="text-sm leading-6 text-slate-500">ระบุเฉพาะโฟลเดอร์ ไม่รวมชื่อไฟล์ ระบบไม่สามารถตรวจสอบได้ว่าโฟลเดอร์มีอยู่จริงหรือเขียนได้บนเครื่องปลายทาง</p>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPathWarningOpen(false)}>ยกเลิก</Button>
+            <Button type="button" onClick={() => {
+              setPathWarningAcknowledged(true);
+              setPathWarningOpen(false);
+            }}>รับทราบและกรอกพาธ</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-h-[calc(100dvh-1rem)] overflow-y-auto p-4 font-kanit sm:max-w-lg sm:p-6">
