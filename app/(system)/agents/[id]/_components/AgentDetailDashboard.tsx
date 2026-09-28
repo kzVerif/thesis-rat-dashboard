@@ -30,6 +30,7 @@ import type {
 } from "../_lib/types";
 
 import ShutdownAgentDialog from "../../_components/ShutdownAgentDialog";
+import InstalledApplicationsCard from "./InstalledApplicationsCard";
 
 type PerformanceConnection = "connecting" | "live" | "reconnecting" | "offline" | "error";
 
@@ -54,6 +55,7 @@ export default function AgentDetailDashboard({
   const [performanceError, setPerformanceError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const socketRef = useRef<WebSocket | null>(null);
+  const [detailSocket, setDetailSocket] = useState<WebSocket | null>(null);
   const online = agent.status === "ONLINE";
   const normalizedProcessQuery = processQuery.trim().toLocaleLowerCase();
   const filteredProcesses = normalizedProcessQuery
@@ -95,6 +97,8 @@ export default function AgentDetailDashboard({
       socketRef.current = socket;
 
       socket.addEventListener("open", () => {
+        if (disposed) return;
+        setDetailSocket(socket);
         retryCount = 0;
         setPerformanceError(null);
         socket?.send(JSON.stringify({
@@ -125,6 +129,9 @@ export default function AgentDetailDashboard({
         }
 
         if (!isSocketMessage(message)) return;
+
+        // One-shot inventory responses belong to the card, not stream status.
+        if (message.type === "installed_apps" || (message.type === "error" && message.stream === "installed_apps")) return;
 
         if (message.type === "error") {
           setPerformanceConnection("error");
@@ -231,6 +238,7 @@ export default function AgentDetailDashboard({
 
       socket.addEventListener("close", () => {
         if (disposed) return;
+        setDetailSocket(null);
         if (socketRef.current === socket) socketRef.current = null;
         setKillingPid(null);
         retryCount += 1;
@@ -352,6 +360,7 @@ export default function AgentDetailDashboard({
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-5">
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
             <div>
@@ -415,6 +424,9 @@ export default function AgentDetailDashboard({
               </p>
             )}
           </div>
+        </div>
+
+          <InstalledApplicationsCard key={initialAgent.id} agentID={initialAgent.id} online={online} socket={detailSocket} />
         </div>
 
         <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
