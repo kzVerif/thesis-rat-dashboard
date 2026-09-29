@@ -426,7 +426,7 @@ export default function AgentDetailDashboard({
           </div>
         </div>
 
-          <InstalledApplicationsCard key={initialAgent.id} agentID={initialAgent.id} online={online} socket={detailSocket} />
+          <InstalledApplicationsCard key={initialAgent.id} agentID={initialAgent.id} hostname={agent.name} online={online} socket={detailSocket} />
         </div>
 
         <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useReducer, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { filterInstalledApps, formatInstallDate, formatInstalledSize, initialInstalledAppsState, installedAppsReducer, InstalledAppsController } from "@/lib/installed-apps";
 
-export default function InstalledApplicationsCard({ agentID, online, socket }: { agentID: string; online: boolean; socket: WebSocket | null }) {
+export default function InstalledApplicationsCard({ agentID, hostname, online, socket }: { agentID: string; hostname: string; online: boolean; socket: WebSocket | null }) {
   const [state, dispatch] = useReducer(installedAppsReducer, initialInstalledAppsState);
   const [query, setQuery] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const exportInProgress = useRef(false);
   const controller = useRef<InstalledAppsController | null>(null);
   useEffect(() => {
     if (!online || !socket || socket.readyState !== WebSocket.OPEN) {
@@ -24,6 +27,21 @@ export default function InstalledApplicationsCard({ agentID, online, socket }: {
   }, [agentID, online, socket]);
   const pending = state.status === "loading" || state.status === "refreshing";
   const filtered = filterInstalledApps(state.apps, query);
+  const exportExcel = async () => {
+    if (exportInProgress.current || state.apps.length === 0 || state.status === "loading") return;
+    exportInProgress.current = true;
+    setExporting(true);
+    try {
+      const { exportInstalledAppsExcel } = await import("@/lib/installed-apps-excel");
+      // Export the entire loaded snapshot, independently of the search query.
+      await exportInstalledAppsExcel(state.apps, hostname);
+    } catch {
+      toast.error("ส่งออก Excel ไม่สำเร็จ กรุณาลองอีกครั้ง");
+    } finally {
+      exportInProgress.current = false;
+      setExporting(false);
+    }
+  };
   const labels = { loading: "กำลังโหลด…", refreshing: "กำลังอัปเดต…", ready: "พร้อมใช้งาน", offline: "ออฟไลน์ / รอการเชื่อมต่อ", error: "โหลดไม่สำเร็จ", timeout: "หมดเวลารอ" };
   return (
     <section aria-labelledby="installed-applications-heading" aria-busy={pending} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -36,7 +54,10 @@ export default function InstalledApplicationsCard({ agentID, online, socket }: {
               {state.updatedAt ? ` • อัปเดตล่าสุด ${new Date(state.updatedAt).toLocaleTimeString("th-TH")}` : " • ยังไม่มีข้อมูล"}
             </p>
           </div>
-          <Button type="button" size="sm" variant="outline" disabled={pending || state.status === "offline" || !online || !socket || socket.readyState !== WebSocket.OPEN} onClick={() => controller.current?.request()}>Refresh</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={exporting || state.apps.length === 0 || state.status === "loading"} onClick={exportExcel}>{exporting ? "กำลัง Export…" : "Export Excel"}</Button>
+            <Button type="button" size="sm" variant="outline" disabled={pending || state.status === "offline" || !online || !socket || socket.readyState !== WebSocket.OPEN} onClick={() => controller.current?.request()}>Refresh</Button>
+          </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="ค้นหาชื่อ เวอร์ชัน หรือผู้เผยแพร่…" aria-label="ค้นหา Installed Applications" className="h-9 sm:max-w-sm" />
