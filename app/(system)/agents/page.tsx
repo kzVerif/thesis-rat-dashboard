@@ -30,7 +30,6 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
         </p>
       </header>
       <AgentManagement
-        key={`${agentsResponse.pagination.page}-${agentsResponse.pagination.limit}`}
         initialAgents={agentsResponse.agents}
         pagination={agentsResponse.pagination}
         rooms={rooms}

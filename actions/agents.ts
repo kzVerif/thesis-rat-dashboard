@@ -15,7 +15,7 @@ const schema = z.object({
   ip_address: z.union([z.ipv4(), z.ipv6(), z.null()]),
   status: z.enum(["ONLINE", "OFFLINE", "WARNING", "DISABLED"]),
   last_seen: nullableDate,
-  enrolled_at: nullableDate,
+  enrolled_at: nullableDate.optional(),
 });
 const idSchema = z.string().uuid("รหัส Agent ไม่ถูกต้อง");
 

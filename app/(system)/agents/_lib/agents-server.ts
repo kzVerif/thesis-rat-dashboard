@@ -54,6 +54,7 @@ export async function getAgent(id: string): Promise<Agent> {
 }
 
 export async function updateAgent(id: string, input: AgentInput): Promise<Agent> {
+  if (input.enrolled_at === undefined) input = { ...input, enrolled_at: (await getAgent(id)).enrolled_at };
   await request(`/api/agents/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(input) });
   return getAgent(id);
 }

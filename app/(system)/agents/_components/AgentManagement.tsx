@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Agent, AgentInput, AgentsPagination, AgentStatus } from "../_lib/types";
+import type { Agent, AgentInput, AgentRow, AgentsPagination, AgentStatus } from "../_lib/types";
+import { useLiveAgents, type LiveConnection } from "../_lib/use-live-agents";
 import type { Room } from "../../rooms/_lib/types";
 
 import ShutdownAgentDialog from "./ShutdownAgentDialog";
@@ -18,11 +19,11 @@ import { canShutdownAgent } from "@/lib/power-control";
 
 type FormValues = { hostname: string; roomId: string };
 
-function toForm(agent: Agent): FormValues {
+function toForm(agent: AgentRow): FormValues {
   return { hostname: agent.hostname, roomId: agent.room_id ?? "" };
 }
 
-function payload(agent: Agent, values: FormValues): AgentInput {
+function payload(agent: AgentRow, values: FormValues): AgentInput {
   return {
     hostname: values.hostname.trim(), room_id: values.roomId || null, os_info: agent.os_info,
     mac_address: agent.mac_address, ip_address: agent.ip_address, status: agent.status,
@@ -31,20 +32,39 @@ function payload(agent: Agent, values: FormValues): AgentInput {
 }
 
 export default function AgentManagement({ initialAgents, rooms, pagination }: { initialAgents: Agent[]; rooms: Room[]; pagination: AgentsPagination }) {
-  const [agents, setAgents] = useState(initialAgents);
-  const [total, setTotal] = useState(pagination.total);
+  const live = useLiveAgents();
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<Agent | null>(null);
-  const [shuttingDown, setShuttingDown] = useState<Agent | null>(null);
-  const [deleting, setDeleting] = useState<Agent | null>(null);
+  const [editing, setEditing] = useState<AgentRow | null>(null);
+  const [shuttingDown, setShuttingDown] = useState<AgentRow | null>(null);
+  const [deleting, setDeleting] = useState<AgentRow | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const visible = useMemo(() => {
+  // Until the first WebSocket snapshot arrives, show the server-rendered page. Afterwards the
+  // snapshot holds every agent, so search and pagination run on the client over the whole list.
+  const agents = useMemo<AgentRow[]>(() => {
+    if (!live.agents) return initialAgents;
+    const known = new Map(initialAgents.map((agent) => [agent.id, agent]));
+    return Array.from(live.agents.values(), (agent) => ({ ...known.get(agent.id), ...agent }));
+  }, [initialAgents, live.agents]);
+
+  const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase();
     if (!q) return agents;
-    return agents.filter((agent) => [agent.hostname, agent.room_id, roomLabel(agent.room_id, rooms), agent.mac_address, agent.ip_address, agent.status, osLabel(agent.os_info)]
+    return agents.filter((agent) => [agent.hostname, agent.room_id, roomLabel(agent, rooms), agent.mac_address, agent.ip_address, agent.status, osLabel(agent.os_info)]
       .some((value) => value?.toLocaleLowerCase().includes(q)));
   }, [agents, query, rooms]);
+
+  const { visible, pageInfo } = useMemo(() => {
+    if (!live.agents) return { visible: filtered, pageInfo: pagination };
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / pagination.limit);
+    const page = Math.max(1, Math.min(pagination.page, totalPages));
+    return {
+      visible: filtered.slice((page - 1) * pagination.limit, page * pagination.limit),
+      pageInfo: { page, limit: pagination.limit, total, total_pages: totalPages },
+    };
+  }, [filtered, live.agents, pagination]);
+  const total = live.agents ? live.agents.size : pagination.total;
 
   function update(values: FormValues) {
     if (!editing) return;
@@ -52,7 +72,7 @@ export default function AgentManagement({ initialAgents, rooms, pagination }: { 
       try {
         const result = await updateAgentAction(editing.id, payload(editing, values));
         if (!result.ok) { toast.error("ไม่สามารถแก้ไข Agent ได้", { description: result.error }); return; }
-        setAgents((current) => current.map((item) => item.id === result.data.id ? result.data : item)); setEditing(null); toast.success("แก้ไข Agent เรียบร้อยแล้ว");
+        live.upsert({ ...result.data, room_name: undefined }); setEditing(null); toast.success("แก้ไข Agent เรียบร้อยแล้ว");
       } catch (error) { toast.error("ข้อมูลไม่ถูกต้อง", { description: error instanceof Error ? error.message : undefined }); }
     });
   }
@@ -62,32 +82,32 @@ export default function AgentManagement({ initialAgents, rooms, pagination }: { 
     startTransition(async () => {
       const result = await deleteAgentAction(deleting.id);
       if (!result.ok) { toast.error("ไม่สามารถลบ Agent ได้", { description: result.error }); return; }
-      setAgents((current) => current.filter((item) => item.id !== deleting.id)); setTotal((current) => Math.max(0, current - 1)); setDeleting(null); toast.success("ลบ Agent เรียบร้อยแล้ว");
+      live.remove(deleting.id); setDeleting(null); toast.success("ลบ Agent เรียบร้อยแล้ว");
     });
   }
 
   return <>
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-col gap-4 border-b border-slate-200 p-4 dark:border-slate-800 sm:p-5 lg:flex-row lg:items-end lg:justify-between">
-        <div><h2 className="text-lg font-semibold text-slate-950 dark:text-white">Agents ทั้งหมด <span className="ml-1 text-sm font-normal text-slate-500">{total} เครื่อง</span></h2><p className="mt-1 text-sm text-slate-500">ข้อมูลเครื่องและเครือข่ายจากฐานข้อมูล</p></div>
+        <div><h2 className="text-lg font-semibold text-slate-950 dark:text-white">Agents ทั้งหมด <span className="ml-1 text-sm font-normal text-slate-500">{total} เครื่อง</span></h2><p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">ข้อมูลเครื่องและเครือข่ายแบบเรียลไทม์ <LiveIndicator connection={live.connection} synced={live.agents !== null} /></p>{live.error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">ไม่สามารถโหลดรายการแบบเรียลไทม์: {live.error}</p>}</div>
         <div className="sm:w-80">
           <label className="relative block sm:w-80"><span className="sr-only">ค้นหา Agent</span><HugeiconsIcon icon={Search01Icon} className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ค้นหาชื่อ, MAC, IP, OS..." className="h-10 pl-9" /></label>
         </div>
       </div>
       {visible.length === 0 ? <Empty /> : <>
         <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[1100px] text-sm"><thead className="bg-slate-50/80 text-left text-xs text-slate-500 dark:bg-slate-950/40"><tr>{["ชื่อเครื่อง", "ห้อง", "หมายเลข MAC", "หมายเลข IP", "ระบบปฏิบัติการ", "สถานะ", "พบล่าสุด", "จัดการ"].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visible.map((agent) => <tr key={agent.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"><td className="px-4 py-4 font-semibold">{agent.hostname}</td><td className="max-w-44 truncate px-4 py-4">{roomLabel(agent.room_id, rooms)}</td><td className="px-4 py-4 font-mono text-xs">{agent.mac_address ?? "—"}</td><td className="px-4 py-4 font-mono text-xs">{agent.ip_address ?? "—"}</td><td className="px-4 py-4">{osLabel(agent.os_info)}</td><td className="px-4 py-4"><StatusBadge status={agent.status} /></td><td className="px-4 py-4 text-xs text-slate-500">{dateLabel(agent.last_seen)}</td><td className="px-4 py-4"><Actions agent={agent} onEdit={setEditing} onDelete={setDeleting} onShutdown={setShuttingDown} /></td></tr>)}</tbody></table></div>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visible.map((agent) => <tr key={agent.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40"><td className="px-4 py-4 font-semibold">{agent.hostname}</td><td className="max-w-44 truncate px-4 py-4">{roomLabel(agent, rooms)}</td><td className="px-4 py-4 font-mono text-xs">{agent.mac_address ?? "—"}</td><td className="px-4 py-4 font-mono text-xs">{agent.ip_address ?? "—"}</td><td className="px-4 py-4">{osLabel(agent.os_info)}</td><td className="px-4 py-4"><StatusBadge status={agent.status} /></td><td className="px-4 py-4 text-xs text-slate-500">{dateLabel(agent.last_seen)}</td><td className="px-4 py-4"><Actions agent={agent} onEdit={setEditing} onDelete={setDeleting} onShutdown={setShuttingDown} /></td></tr>)}</tbody></table></div>
         <div className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden">{visible.map((agent) => <article key={agent.id} className="p-4"><div className="flex items-start gap-3"><span className="flex size-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><HugeiconsIcon icon={ComputerIcon} className="size-5" /></span><div className="min-w-0 flex-1"><h3 className="truncate font-semibold">{agent.hostname}</h3><p className="mt-1 truncate text-xs text-slate-500">{agent.ip_address ?? "ไม่มี IP address"}</p></div><StatusBadge status={agent.status} /></div><div className="mt-4"><Actions agent={agent} onEdit={setEditing} onDelete={setDeleting} onShutdown={setShuttingDown} /></div></article>)}</div>
       </>}
-      <PaginationFooter pagination={{ ...pagination, total }} visibleCount={visible.length} />
+      <PaginationFooter pagination={pageInfo} visibleCount={visible.length} />
     </section>
-    {shuttingDown && <ShutdownAgentDialog key={shuttingDown.id} agent={shuttingDown} roomName={roomLabel(shuttingDown.room_id, rooms)} onOpenChange={(open) => !open && setShuttingDown(null)} />}
+    {shuttingDown && <ShutdownAgentDialog key={shuttingDown.id} agent={shuttingDown} roomName={roomLabel(shuttingDown, rooms)} onOpenChange={(open) => !open && setShuttingDown(null)} />}
     {editing && <AgentFormDialog key={editing.id} open onOpenChange={(open) => !open && setEditing(null)} agent={editing} rooms={rooms} pending={pending} onSubmit={update} />}
     <Dialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}><DialogContent className="font-kanit sm:max-w-md"><DialogHeader><DialogTitle>ยืนยันการลบ Agent</DialogTitle><DialogDescription>การลบ {deleting?.hostname} จะลบ commands ที่เกี่ยวข้องด้วย และไม่สามารถย้อนกลับได้</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setDeleting(null)} disabled={pending}>ยกเลิก</Button><Button variant="destructive" onClick={remove} disabled={pending}>{pending ? "กำลังลบ..." : "ยืนยันลบ"}</Button></DialogFooter></DialogContent></Dialog>
   </>;
 }
 
-function AgentFormDialog({ open, onOpenChange, agent, rooms, pending, onSubmit }: { open: boolean; onOpenChange: (open: boolean) => void; agent: Agent; rooms: Room[]; pending: boolean; onSubmit: (values: FormValues) => void }) {
+function AgentFormDialog({ open, onOpenChange, agent, rooms, pending, onSubmit }: { open: boolean; onOpenChange: (open: boolean) => void; agent: AgentRow; rooms: Room[]; pending: boolean; onSubmit: (values: FormValues) => void }) {
   const [form, setForm] = useState(() => toForm(agent));
   const set = (key: keyof FormValues, value: string) => setForm((current) => ({ ...current, [key]: value }));
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(form); };
@@ -132,8 +152,9 @@ function PaginationFooter({ pagination, visibleCount }: { pagination: AgentsPagi
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="space-y-2"><Label>{label}</Label>{children}</div>; }
 function Empty() { return <div className="flex min-h-64 flex-col items-center justify-center p-6 text-center"><HugeiconsIcon icon={ComputerIcon} className="mb-3 size-8 text-slate-400" /><h3 className="font-semibold">ไม่พบ Agent</h3><p className="mt-1 text-sm text-slate-500">ยังไม่มีข้อมูลหรือไม่ตรงกับคำค้นหา</p></div>; }
-function Actions({ agent, onEdit, onDelete, onShutdown }: { agent: Agent; onEdit: (agent: Agent) => void; onDelete: (agent: Agent) => void; onShutdown: (agent: Agent) => void }) { return <div className="flex flex-wrap justify-end gap-2"><Button asChild size="sm" variant="outline"><Link href={`/agents/${agent.id}`}><HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />รายละเอียด</Link></Button><Button size="sm" variant="outline" onClick={() => onEdit(agent)}><HugeiconsIcon icon={Edit03Icon} className="size-4" />แก้ไข</Button><Button size="sm" variant="outline" disabled={!canShutdownAgent(agent.status)} onClick={() => onShutdown(agent)}><HugeiconsIcon icon={ShutDownIcon} className="size-4" />ปิดเครื่อง</Button><Button size="sm" variant="destructive" onClick={() => onDelete(agent)}><HugeiconsIcon icon={Delete02Icon} className="size-4" />ลบ</Button></div>; }
+function Actions({ agent, onEdit, onDelete, onShutdown }: { agent: AgentRow; onEdit: (agent: AgentRow) => void; onDelete: (agent: AgentRow) => void; onShutdown: (agent: AgentRow) => void }) { return <div className="flex flex-wrap justify-end gap-2"><Button asChild size="sm" variant="outline"><Link href={`/agents/${agent.id}`}><HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />รายละเอียด</Link></Button><Button size="sm" variant="outline" onClick={() => onEdit(agent)}><HugeiconsIcon icon={Edit03Icon} className="size-4" />แก้ไข</Button><Button size="sm" variant="outline" disabled={!canShutdownAgent(agent.status)} onClick={() => onShutdown(agent)}><HugeiconsIcon icon={ShutDownIcon} className="size-4" />ปิดเครื่อง</Button><Button size="sm" variant="destructive" onClick={() => onDelete(agent)}><HugeiconsIcon icon={Delete02Icon} className="size-4" />ลบ</Button></div>; }
 function StatusBadge({ status }: { status: AgentStatus }) { const color = status === "ONLINE" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : status === "WARNING" ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300" : status === "DISABLED" ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"; const labels: Record<AgentStatus, string> = { ONLINE: "ออนไลน์", OFFLINE: "ออฟไลน์", WARNING: "มีคำเตือน", DISABLED: "ปิดใช้งาน" }; return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${color}`}>{labels[status]}</span>; }
-function roomLabel(id: string | null, rooms: Room[]) { if (!id) return "ยังไม่ได้จัดห้อง"; return rooms.find((room) => room.id === id)?.name ?? "ไม่พบข้อมูลห้อง"; }
-function osLabel(value: Record<string, unknown> | null) { if (!value) return "—"; const name = typeof value.name === "string" ? value.name : ""; const version = typeof value.version === "string" ? value.version : ""; return [name, version].filter(Boolean).join(" ") || JSON.stringify(value); }
+function LiveIndicator({ connection, synced }: { connection: LiveConnection; synced: boolean }) { const isLive = connection === "live" && synced; const label = isLive ? "เชื่อมต่อแล้ว" : connection === "reconnecting" ? "กำลังเชื่อมต่อใหม่..." : connection === "error" ? "เชื่อมต่อไม่สำเร็จ" : "กำลังเชื่อมต่อ..."; const color = isLive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : connection === "error" ? "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300" : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"; return <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${color}`}><span className={`size-1.5 rounded-full bg-current ${isLive ? "animate-pulse" : ""}`} />{label}</span>; }
+function roomLabel(agent: Pick<AgentRow, "room_id" | "room_name">, rooms: Room[]) { if (!agent.room_id) return "ยังไม่ได้จัดห้อง"; return agent.room_name || (rooms.find((room) => room.id === agent.room_id)?.name ?? "ไม่พบข้อมูลห้อง"); }
+function osLabel(value: Record<string, unknown> | null) { if (!value) return "—"; const text = (key: string) => typeof value[key] === "string" ? value[key] as string : ""; return [text("name"), text("edition"), text("version")].filter(Boolean).join(" ") || JSON.stringify(value); }
 function dateLabel(value: string | null) { if (!value) return "—"; const date = new Date(value); return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(date); }
