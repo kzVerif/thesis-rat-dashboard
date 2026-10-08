@@ -13,6 +13,20 @@ function isLiveAgent(value: unknown): value is LiveAgent {
   return typeof agent.id === "string" && typeof agent.hostname === "string" && typeof agent.status === "string";
 }
 
+// The socket may omit keys or send "" for missing values; the update form needs null for those.
+const text = (value: unknown) => (typeof value === "string" && value.trim() ? value : null);
+function normalize(agent: LiveAgent): LiveAgent {
+  return {
+    ...agent,
+    room_id: text(agent.room_id),
+    room_name: text(agent.room_name) ?? undefined,
+    os_info: agent.os_info && typeof agent.os_info === "object" ? agent.os_info : null,
+    ip_address: text(agent.ip_address)?.split("/")[0] ?? null,
+    mac_address: text(agent.mac_address),
+    last_seen: text(agent.last_seen),
+  };
+}
+
 /**
  * Subscribes to the agents list on /ws/frontend (see ws_docs/frontend-agents.md).
  * `agents` stays null until the first snapshot arrives; afterwards it is keyed by agent id
@@ -45,12 +59,12 @@ export function useLiveAgents() {
         if (!message || typeof message !== "object") return;
 
         if (message.type === "agents" && message.action === "snapshot" && Array.isArray(message.data)) {
-          setAgents(new Map(message.data.filter(isLiveAgent).map((agent) => [agent.id, agent])));
+          setAgents(new Map(message.data.filter(isLiveAgent).map((agent) => [agent.id, normalize(agent)])));
           setError(null);
         } else if (message.type === "agents" && message.action === "error") {
           setError(typeof message.error === "string" ? message.error : "cannot load agents");
         } else if (message.type === "agent_update" && isLiveAgent(message.data)) {
-          const agent = message.data;
+          const agent = normalize(message.data);
           setAgents((current) => {
             if (!current) return current;
             const next = new Map(current);

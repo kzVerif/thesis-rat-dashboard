@@ -20,7 +20,11 @@ const schema = z.object({
 const idSchema = z.string().uuid("รหัส Agent ไม่ถูกต้อง");
 
 function failure<T = undefined>(error: unknown): AgentActionResult<T> {
-  if (error instanceof z.ZodError) return { ok: false, error: error.issues[0]?.message ?? "ข้อมูลไม่ถูกต้อง" };
+  if (error instanceof z.ZodError) {
+    const issue = error.issues[0];
+    if (!issue) return { ok: false, error: "ข้อมูลไม่ถูกต้อง" };
+    return { ok: false, error: issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message };
+  }
   return { ok: false, error: error instanceof Error ? error.message : "เกิดข้อผิดพลาดจากระบบหลังบ้าน" };
 }
 
